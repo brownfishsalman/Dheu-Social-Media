@@ -215,12 +215,27 @@ data class Message(
     val kind: String = "text",
     val event: SystemEvent? = null,
     @SerialName("note_text") val noteText: String? = null,
+    /** A photo in the private "once" bucket (0023); [oncePath] is null once it's gone. */
+    @SerialName("view_once") val viewOnce: Boolean = false,
+    @SerialName("once_path") val oncePath: String? = null,
     @SerialName("created_at") val createdAt: String,
     val story: StoryRef? = null,
     // PostgREST returns this self-join as an object or a one-item array; see [replyPreview].
     @SerialName("reply") val replyRaw: JsonElement? = null,
+    val reactions: List<Reaction> = emptyList(),
+    /** View-once: my own open, or who opened the photo I sent. */
+    val opens: List<Open> = emptyList(),
 ) {
     val isSystem get() = kind == "system"
+
+    /** The emoji I reacted with, if any. */
+    fun reactionOf(userId: String): String? = reactions.firstOrNull { it.userId == userId }?.emoji
+
+    fun withReaction(userId: String, emoji: String?): Message =
+        copy(reactions = reactions.filter { it.userId != userId } + listOfNotNull(emoji?.let { Reaction(userId, it) }))
+
+    fun withOpen(userId: String, openedAt: String): Message =
+        if (opens.any { it.userId == userId }) this else copy(opens = opens + Open(userId, openedAt))
 
     val replyPreview: ReplyPreview?
         get() {
@@ -235,11 +250,21 @@ data class Message(
     fun toReplyPreview() = ReplyPreview(id, body, senderId, imagePath, imageExpiresAt, audioPath, audioExpiresAt)
 }
 
+@Serializable
+data class Reaction(@SerialName("user_id") val userId: String, val emoji: String)
+
+@Serializable
+data class Open(@SerialName("user_id") val userId: String, @SerialName("opened_at") val openedAt: String)
+
+/** The quick reactions offered on a message (same as the website). */
+val QUICK_REACTIONS = listOf("❤️", "😂", "😮", "😢", "😡", "👍")
+
 const val MESSAGE_COLUMNS =
     "id, conversation_id, sender_id, body, story_id, image_path, image_expires_at, audio_path, audio_duration_ms, " +
-        "audio_expires_at, reply_to_id, kind, event, note_text, created_at"
+        "audio_expires_at, reply_to_id, kind, event, note_text, view_once, once_path, created_at"
 const val MESSAGE_SELECT = "$MESSAGE_COLUMNS, story:stories(image_path, author_id), " +
-    "reply:reply_to_id(id, body, sender_id, image_path, image_expires_at, audio_path, audio_expires_at)"
+    "reply:reply_to_id(id, body, sender_id, image_path, image_expires_at, audio_path, audio_expires_at), " +
+    "reactions:message_reactions(user_id, emoji), opens:message_opens(user_id, opened_at)"
 
 /** "📷 Photo", "🎤 Voice message", or the text: valid even after media expired. */
 fun replyLabel(r: ReplyPreview): String = when {
@@ -264,6 +289,7 @@ data class LastMessage(
     @SerialName("audio_path") val audioPath: String? = null,
     @SerialName("note_text") val noteText: String? = null,
     val kind: String = "text",
+    @SerialName("view_once") val viewOnce: Boolean = false,
     val sender: SenderName? = null,
 )
 
@@ -291,6 +317,8 @@ data class ConversationSummary(
     val memberCount: Int,
     val last: LastMessage?,
     val unread: Int,
+    /** When the others last read it, for "Seen" under my last message (0023). */
+    val receipts: List<Receipt> = emptyList(),
 )
 
 data class ConversationInfo(

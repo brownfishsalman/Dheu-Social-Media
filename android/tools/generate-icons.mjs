@@ -23,7 +23,7 @@ const ICONS = {
   PlayFilled: "play", Pause: "pause", SquarePen: "square-pen", Link: "link-2", UserPlus: "user-plus",
   UserCheck: "user-check", Smile: "smile", Grid: "grid-3x3", Layers: "layers", Ban: "ban",
   ShieldOff: "shield-off", UserMinus: "user-minus", ShieldCheck: "shield-check", Plus: "plus",
-  Eye: "eye", Alert: "circle-alert", Refresh: "refresh-cw", Share: "share-2", Ticket: "ticket",
+  Eye: "eye", EyeOff: "eye-off", Alert: "circle-alert", Refresh: "refresh-cw", Share: "share-2", Ticket: "ticket",
   Square: "square", SquareFilled: "square", AtSign: "at-sign", Bell: "bell", BellOff: "bell-off", Info: "info",
   Pencil: "pencil", MessagesSquare: "messages-square", CirclePlus: "circle-plus",
 };

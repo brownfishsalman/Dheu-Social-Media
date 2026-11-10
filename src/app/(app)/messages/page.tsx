@@ -11,6 +11,7 @@ import { NotesTray } from "@/components/chat/NotesTray";
 import { ConversationMenu } from "@/components/chat/ConversationMenu";
 import { getNotes } from "@/lib/data/notes";
 import { timeAgo } from "@/lib/time";
+import { receiptLabel } from "@/lib/receipts";
 
 export const metadata: Metadata = { title: "Messages" };
 
@@ -73,10 +74,21 @@ export default async function MessagesPage() {
                   ? `${(c.last.sender_name ?? "Someone").split(" ")[0]}: `
                   : ""
               : "";
+            // My message was the last one and someone has seen it: say so, as on Instagram.
+            const seen =
+              c.last && c.last.kind !== "system" && c.last.sender_id === me.id
+                ? receiptLabel(c.last.created_at, c.receipts, c.isGroup, c.isGroup ? c.memberCount - 1 : 1, (id) =>
+                    (c.members.find((p) => p.id === id)?.full_name ?? "Someone").split(" ")[0],
+                  )
+                : null;
             const preview = c.last
               ? c.last.kind === "system"
                 ? c.last.body // "Salman added Rafi Karim"
-                : `${who}${c.last.story_id ? "Replied to a story: " : ""}${c.last.note_text ? "Replied to a note: " : ""}${c.last.image_path ? "📷 Photo " : ""}${c.last.audio_path ? "🎤 Voice message " : ""}${c.last.body}`
+                : seen && seen !== "Sent"
+                  ? c.isGroup
+                    ? seen
+                    : "Seen"
+                  : `${who}${c.last.story_id ? "Replied to a story: " : ""}${c.last.note_text ? "Replied to a note: " : ""}${c.last.image_path ? "📷 Photo " : ""}${c.last.view_once ? "📷 View-once photo " : ""}${c.last.audio_path ? "🎤 Voice message " : ""}${c.last.body}`
               : c.isGroup
                 ? `${c.memberCount} members · No messages yet`
                 : "No messages yet";

@@ -429,6 +429,95 @@ export type Database = {
           },
         ]
       }
+      message_opens: {
+        Row: {
+          conversation_id: string
+          message_id: string
+          opened_at: string
+          user_id: string
+        }
+        Insert: {
+          conversation_id: string
+          message_id: string
+          opened_at?: string
+          user_id: string
+        }
+        Update: {
+          conversation_id?: string
+          message_id?: string
+          opened_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_opens_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_opens_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_opens_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      message_reactions: {
+        Row: {
+          conversation_id: string
+          created_at: string
+          emoji: string
+          message_id: string
+          user_id: string
+        }
+        Insert: {
+          conversation_id: string
+          created_at?: string
+          emoji: string
+          message_id: string
+          user_id: string
+        }
+        Update: {
+          conversation_id?: string
+          created_at?: string
+          emoji?: string
+          message_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_reactions_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_reactions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_reactions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           audio_duration_ms: number | null
@@ -443,9 +532,11 @@ export type Database = {
           image_path: string | null
           kind: string
           note_text: string | null
+          once_path: string | null
           reply_to_id: string | null
           sender_id: string
           story_id: string | null
+          view_once: boolean
         }
         Insert: {
           audio_duration_ms?: number | null
@@ -460,9 +551,11 @@ export type Database = {
           image_path?: string | null
           kind?: string
           note_text?: string | null
+          once_path?: string | null
           reply_to_id?: string | null
           sender_id: string
           story_id?: string | null
+          view_once?: boolean
         }
         Update: {
           audio_duration_ms?: number | null
@@ -477,9 +570,11 @@ export type Database = {
           image_path?: string | null
           kind?: string
           note_text?: string | null
+          once_path?: string | null
           reply_to_id?: string | null
           sender_id?: string
           story_id?: string | null
+          view_once?: boolean
         }
         Relationships: [
           {
@@ -1190,6 +1285,7 @@ export type Database = {
       }
       block_status: { Args: { p_other: string }; Returns: string }
       blocked_either: { Args: { p_a: string; p_b: string }; Returns: boolean }
+      can_download_once: { Args: { p_name: string }; Returns: boolean }
       can_read_message: {
         Args: {
           p_conversation_id: string
@@ -1198,6 +1294,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      can_use_typing_topic: { Args: { p_topic: string }; Returns: boolean }
       can_user_view_content_of: {
         Args: { p_author: string; p_viewer: string }
         Returns: boolean
@@ -1236,6 +1333,7 @@ export type Database = {
         Returns: undefined
       }
       mentioned_profiles: { Args: { p_text: string }; Returns: string[] }
+      open_view_once: { Args: { p_message_id: string }; Returns: string }
       post_system_message: {
         Args: {
           p_actor: string
@@ -1259,9 +1357,22 @@ export type Database = {
           requested_me: boolean
         }[]
       }
+      react_to_message: {
+        Args: { p_emoji: string; p_message_id: string }
+        Returns: undefined
+      }
       read_receipts: {
         Args: { p_conversation_id: string }
         Returns: {
+          joined_at: string
+          last_read_at: string
+          user_id: string
+        }[]
+      }
+      read_receipts_inbox: {
+        Args: never
+        Returns: {
+          conversation_id: string
           joined_at: string
           last_read_at: string
           user_id: string
@@ -1279,6 +1390,13 @@ export type Database = {
       }
       set_account_privacy: { Args: { p_private: boolean }; Returns: undefined }
       set_note: { Args: { p_body: string }; Returns: undefined }
+      spent_view_once_photos: {
+        Args: never
+        Returns: {
+          id: string
+          once_path: string
+        }[]
+      }
       unread_announcement_count: { Args: never; Returns: number }
       unread_counts: {
         Args: never

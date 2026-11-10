@@ -13,6 +13,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { EditProfileForm } from "@/components/settings/EditProfileForm";
 import { ThemePicker, ChangePasswordForm } from "@/components/settings/AccountSettings";
 import { PrivacySettings } from "@/components/settings/AccountPrivacy";
+import { ReadReceiptsSetting } from "@/components/settings/ReadReceipts";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -39,6 +40,12 @@ export default async function SettingsPage() {
           <h2 className="mb-1 font-display text-lg font-semibold">Account privacy</h2>
           <p className="mb-3 text-sm text-ink-muted">Who can see your posts, stories and followers.</p>
           <PrivacySettings isPrivate={profile.is_private} />
+        </section>
+
+        <section className="card p-5">
+          <h2 className="mb-1 font-display text-lg font-semibold">Read receipts</h2>
+          <p className="mb-3 text-sm text-ink-muted">Whether people see &ldquo;Seen&rdquo; when you&apos;ve read their messages.</p>
+          <ReadReceiptsSetting userId={profile.id} on={profile.read_receipts} />
         </section>
 
         <section className="card p-5">

@@ -27,8 +27,10 @@ type MessageRow = {
   kind: "text" | "system";
   event: { type: string; actor: string; targets?: string[]; title?: string } | null;
   note_text?: string | null;
+  view_once?: boolean; // 0023
 };
 type AnnouncementRow = { id: string; body: string };
+type ReactionRow = { message_id: string; user_id: string; conversation_id: string; emoji: string }; // 0023
 
 // Who did it: their username for the text, their photo for the app's notification.
 async function personOf(id: string): Promise<{ name: string; icon?: string }> {
@@ -103,12 +105,47 @@ export async function POST(request: Request) {
       recipients = conv.members
         .map((m) => m.user_id)
         .filter((id) => id !== msg.sender_id && !skip.has(id) && !(conv.is_group && blocked.has(id)));
-      const content = msg.body ? msg.body.slice(0, 100) : msg.audio_path ? "🎤 Voice message" : "📷 Photo";
+      const content = msg.body
+        ? msg.body.slice(0, 100)
+        : msg.audio_path
+          ? "🎤 Voice message"
+          : msg.view_once
+            ? "📷 View-once photo"
+            : "📷 Photo";
       const text = msg.note_text ? `Replied to your note: ${content}` : content;
       payload = conv.is_group
         ? { title: conv.title ?? "Group", body: `${sender}: ${text}`, url, tag, icon }
         : { title: sender, body: text, url, tag, icon };
     }
+  } else if (table === "message_reactions") {
+    // "Rafi reacted ❤️ to your message", to the message's sender only.
+    const r = record as ReactionRow;
+    const { data: msg } = await admin
+      .from("messages")
+      .select("sender_id, body, kind, view_once, conversation:conversations(is_group, title)")
+      .eq("id", r.message_id)
+      .maybeSingle();
+    if (!msg || msg.kind !== "text" || msg.sender_id === r.user_id) {
+      return NextResponse.json({ ok: true, skipped: "nothing to tell" });
+    }
+    const [{ data: member }, { data: blocks }] = await Promise.all([
+      // They may have left the group since.
+      admin.from("conversation_members").select("user_id").eq("conversation_id", r.conversation_id).eq("user_id", msg.sender_id).maybeSingle(),
+      // Never across a block.
+      admin
+        .from("blocks")
+        .select("blocker_id")
+        .or(`and(blocker_id.eq.${r.user_id},blocked_id.eq.${msg.sender_id}),and(blocker_id.eq.${msg.sender_id},blocked_id.eq.${r.user_id})`)
+        .limit(1),
+    ]);
+    if (!member || (blocks ?? []).length > 0) return NextResponse.json({ ok: true, skipped: "not for them" });
+    const { name: actor, icon } = await personOf(r.user_id);
+    const conv = Array.isArray(msg.conversation) ? msg.conversation[0] : msg.conversation;
+    const what = msg.body ? `: ${msg.body.slice(0, 60)}` : msg.view_once ? " (view-once photo)" : "";
+    recipients = [msg.sender_id];
+    payload = conv?.is_group
+      ? { title: conv.title ?? "Group", body: `${actor} reacted ${r.emoji} to your message${what}`, url: `/messages/${r.conversation_id}`, tag: `chat-${r.conversation_id}`, icon }
+      : { title: actor, body: `Reacted ${r.emoji} to your message${what}`, url: `/messages/${r.conversation_id}`, tag: `chat-${r.conversation_id}`, icon };
   } else if (table === "announcements") {
     const a = record as AnnouncementRow;
     const [{ data: subs }, { data: devices }] = await Promise.all([

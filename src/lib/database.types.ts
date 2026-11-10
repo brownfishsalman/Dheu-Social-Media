@@ -69,6 +69,8 @@ type Overrides = {
     };
     Functions: {
       follow_user: { Returns: "following" | "requested" };
+      // null takes the reaction back (0023).
+      react_to_message: { Args: { p_message_id: string; p_emoji: string | null } };
       // null when neither has blocked the other, or the group is gone.
       block_status: { Returns: string | null };
       group_owner: { Returns: string | null };

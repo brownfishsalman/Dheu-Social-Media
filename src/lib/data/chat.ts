@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Profile, MessageKind } from "@/lib/database.types";
 import type { SystemEvent } from "@/lib/chat-events";
 import type { BlockStatus } from "@/lib/data/profiles";
+import type { Reaction, Receipt } from "@/lib/receipts";
 import { MESSAGE_PAGE } from "@/lib/constants";
 
 export type ChatPeer = Pick<Profile, "id" | "username" | "full_name" | "avatar_path">;
@@ -37,25 +38,34 @@ export type ConversationSummary = {
     audio_path: string | null;
     note_text: string | null;
     kind: MessageKind;
+    view_once: boolean;
   } | null;
   unread: number;
+  receipts: Receipt[]; // when the others last read it, for "Seen" under my last message
 };
 
 export async function getConversations(meId: string): Promise<ConversationSummary[]> {
   const supabase = await createClient();
-  const [{ data: convs }, { data: unread }] = await Promise.all([
+  const [{ data: convs }, { data: unread }, { data: receipts }] = await Promise.all([
     supabase
       .from("conversations")
       .select(
-        `id, is_group, title, last_message_at, ${MEMBER_EMBED}, reads:conversation_reads(cleared_at), messages(body, sender_id, created_at, story_id, image_path, audio_path, note_text, kind, sender:profiles!messages_sender_id_fkey(full_name))`,
+        `id, is_group, title, last_message_at, ${MEMBER_EMBED}, reads:conversation_reads(cleared_at), messages(body, sender_id, created_at, story_id, image_path, audio_path, note_text, kind, view_once, sender:profiles!messages_sender_id_fkey(full_name))`,
       )
       .order("last_message_at", { ascending: false, nullsFirst: false })
       .order("created_at", { referencedTable: "messages", ascending: false })
       .limit(1, { referencedTable: "messages" }),
     supabase.rpc("unread_counts"),
+    supabase.rpc("read_receipts_inbox"),
   ]);
 
   const unreadBy = new Map((unread ?? []).map((u) => [u.conversation_id, Number(u.unread)]));
+  const receiptsBy = new Map<string, Receipt[]>();
+  for (const r of receipts ?? []) {
+    const list = receiptsBy.get(r.conversation_id) ?? [];
+    list.push({ user_id: r.user_id, last_read_at: r.last_read_at, joined_at: r.joined_at });
+    receiptsBy.set(r.conversation_id, list);
+  }
 
   const out: ConversationSummary[] = [];
   for (const c of convs ?? []) {
@@ -76,6 +86,7 @@ export async function getConversations(meId: string): Promise<ConversationSummar
       last_message_at: c.last_message_at,
       last: m ? { ...m, sender_name: m.sender?.full_name ?? null } : null,
       unread: unreadBy.get(c.id) ?? 0,
+      receipts: receiptsBy.get(c.id) ?? [],
     });
   }
   return out;
@@ -157,13 +168,19 @@ export type ChatMessage = {
   kind: MessageKind;
   event: SystemEvent | null;
   note_text: string | null; // set when this message replies to a note
+  view_once: boolean; // a photo in the private "once" bucket (0023)
+  once_path: string | null; // its file; null once it's gone
   created_at: string;
   story: { image_path: string; author_id: string } | null;
   reply: ReplyPreview | null;
+  reactions: Reaction[];
+  opens: { user_id: string; opened_at: string }[]; // view-once: my own open, or who opened mine
 };
 
-export const MESSAGE_SELECT =
-  "id, conversation_id, sender_id, body, story_id, image_path, image_expires_at, audio_path, audio_duration_ms, audio_expires_at, reply_to_id, kind, event, note_text, created_at, story:stories(image_path, author_id), reply:reply_to_id(id, body, sender_id, image_path, image_expires_at, audio_path, audio_expires_at)";
+export const MESSAGE_COLUMNS =
+  "id, conversation_id, sender_id, body, story_id, image_path, image_expires_at, audio_path, audio_duration_ms, audio_expires_at, reply_to_id, kind, event, note_text, view_once, once_path, created_at";
+
+export const MESSAGE_SELECT = `${MESSAGE_COLUMNS}, story:stories(image_path, author_id), reply:reply_to_id(id, body, sender_id, image_path, image_expires_at, audio_path, audio_expires_at), reactions:message_reactions(user_id, emoji), opens:message_opens(user_id, opened_at)`;
 
 
 export async function getMessages(conversationId: string, before?: string): Promise<ChatMessage[]> {
@@ -180,6 +197,8 @@ export async function getMessages(conversationId: string, before?: string): Prom
   const rows = (data ?? []).map((r) => ({
     ...r,
     reply: Array.isArray(r.reply) ? ((r.reply[0] as ReplyPreview | undefined) ?? null) : ((r.reply as ReplyPreview | null) ?? null),
+    reactions: r.reactions ?? [],
+    opens: r.opens ?? [],
   })) as unknown as ChatMessage[];
   return rows.reverse();
 }

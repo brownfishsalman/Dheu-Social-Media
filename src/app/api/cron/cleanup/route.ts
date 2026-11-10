@@ -13,7 +13,7 @@ export async function GET(request: Request) {
 
   const admin = createAdminClient();
   const now = new Date().toISOString();
-  const report = { posts: 0, postImages: 0, stories: 0, chatPhotos: 0, voiceMessages: 0, emptyGroups: 0, errors: [] as string[] };
+  const report = { posts: 0, postImages: 0, stories: 0, chatPhotos: 0, voiceMessages: 0, viewOncePhotos: 0, emptyGroups: 0, errors: [] as string[] };
 
   // ---- expired posts -------------------------------------------------
   const { data: posts, error: pErr } = await admin
@@ -93,6 +93,20 @@ export async function GET(request: Request) {
     const { error } = await admin.from("messages").update({ audio_path: null }).in("id", voices.map((v) => v.id));
     if (error) report.errors.push(`voice rows: ${error.message}`);
     else report.voiceMessages = voices.length;
+  }
+
+  // ---- view-once photos: past their expiry, or opened by everyone (0023) ---
+  const { data: spent, error: oErr } = await admin.rpc("spent_view_once_photos");
+  if (oErr) report.errors.push(`view-once photos: ${oErr.message}`);
+  if (spent && spent.length > 0) {
+    const paths = spent.map((s) => s.once_path);
+    for (let i = 0; i < paths.length; i += 100) {
+      const { error } = await admin.storage.from("once").remove(paths.slice(i, i + 100));
+      if (error) report.errors.push(`view-once files: ${error.message}`);
+    }
+    const { error } = await admin.from("messages").update({ once_path: null }).in("id", spent.map((s) => s.id));
+    if (error) report.errors.push(`view-once rows: ${error.message}`);
+    else report.viewOncePhotos = spent.length;
   }
 
   // ---- groups everyone has left (once their media files are gone) ---------

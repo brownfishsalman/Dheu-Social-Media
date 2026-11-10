@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Send, Loader2, ImagePlus, X, Reply, Clock, Mic, Square, Trash2, MoreHorizontal, Copy, Undo2 } from "lucide-react";
+import { Send, Loader2, ImagePlus, X, Reply, Clock, Mic, Square, Trash2, MoreHorizontal, Copy, Undo2, Eye, EyeOff } from "lucide-react";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { Sheet } from "@/components/ui/Sheet";
 import { createClient } from "@/lib/supabase/client";
 import { ensureRealtimeAuth } from "@/lib/supabase/realtime";
+import { QUICK_REACTIONS, groupReactions, receiptLabel, type Receipt } from "@/lib/receipts";
 import { publicUrl } from "@/lib/storage";
 import { processImage, POST_MAX, ACCEPT_ATTR, newImagePath, type ProcessedImage } from "@/lib/images";
 import { newAudioPath, baseMime, formatDuration } from "@/lib/audio";
@@ -69,11 +71,33 @@ function toReplyPreview(m: ChatMessage): ReplyPreview {
   };
 }
 const REPLY_SELECT = "id, body, sender_id, image_path, image_expires_at, audio_path, audio_expires_at";
+// Keep in sync with MESSAGE_COLUMNS in lib/data/chat.ts (server-only, so not importable here).
+const MESSAGE_COLUMNS =
+  "id, conversation_id, sender_id, body, story_id, image_path, image_expires_at, audio_path, audio_duration_ms, audio_expires_at, reply_to_id, kind, event, note_text, view_once, once_path, created_at";
+const TYPING_SHOWN_MS = 5000; // how long "typing…" stays after the last signal
+const TYPING_EVERY_MS = 2500; // how often we say we're typing while the text changes
 
 // Drop an unsent message, and its quote from any reply to it.
 function withoutMessage(list: ChatMessage[], id: string): ChatMessage[] {
   if (!list.some((m) => m.id === id || m.reply?.id === id)) return list;
   return list.filter((m) => m.id !== id).map((m) => (m.reply?.id === id ? { ...m, reply: null } : m));
+}
+
+// One member's reaction on one message: set, changed, or (emoji null) taken back.
+function withReaction(list: ChatMessage[], messageId: string, userId: string, emoji: string | null): ChatMessage[] {
+  if (!list.some((m) => m.id === messageId)) return list;
+  return list.map((m) => {
+    if (m.id !== messageId) return m;
+    const others = m.reactions.filter((r) => r.user_id !== userId);
+    return { ...m, reactions: emoji ? [...others, { user_id: userId, emoji }] : others };
+  });
+}
+
+function withOpen(list: ChatMessage[], messageId: string, userId: string, openedAt: string): ChatMessage[] {
+  if (!list.some((m) => m.id === messageId)) return list;
+  return list.map((m) =>
+    m.id === messageId && !m.opens.some((o) => o.user_id === userId) ? { ...m, opens: [...m.opens, { user_id: userId, opened_at: openedAt }] } : m,
+  );
 }
 
 // "You added Rafi Karim, Tania Sultana" — rendered from the event so the
@@ -119,6 +143,16 @@ export function ChatThread({ conversationId, meId, peer, group, members, mention
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [actionFor, setActionFor] = useState<ChatMessage | null>(null); // long-press / ⋯ menu
   const closeActions = useCallback(() => setActionFor(null), []);
+  const [reactorsFor, setReactorsFor] = useState<ChatMessage | null>(null); // who reacted
+  const closeReactors = useCallback(() => setReactorsFor(null), []);
+  const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [typing, setTyping] = useState<Map<string, number>>(() => new Map()); // user id -> shown until (ms)
+  const [viewOnce, setViewOnce] = useState(false); // send the attached photo as view-once
+  const [onceView, setOnceView] = useState<string | null>(null); // an opened view-once photo (object URL)
+  const [opening, setOpening] = useState<string | null>(null); // view-once message being opened
+  const [now, setNow] = useState(() => Date.now());
+  const typingChannel = useRef<RealtimeChannel | null>(null);
+  const lastTypingSent = useRef(0);
   const listRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -136,6 +170,84 @@ export function ChatThread({ conversationId, meId, peer, group, members, mention
     bottomRef.current?.scrollIntoView();
     markRead();
   }, [markRead]);
+
+  // When the others last read this chat (0022), for "Seen" under my last message.
+  const refreshReceipts = useCallback(async () => {
+    const { data } = await createClient().rpc("read_receipts", { p_conversation_id: conversationId });
+    if (data) setReceipts(data);
+  }, [conversationId]);
+  useEffect(() => {
+    let cancelled = false;
+    createClient()
+      .rpc("read_receipts", { p_conversation_id: conversationId })
+      .then(({ data }) => {
+        if (!cancelled && data) setReceipts(data);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId]);
+
+  // "Seen 5m ago" ages; "typing…" fades out on its own.
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  useEffect(() => {
+    if (typing.size === 0) return;
+    const t = setInterval(() => {
+      setTyping((m) => {
+        const n = Date.now();
+        const next = new Map([...m].filter(([, until]) => until > n));
+        return next.size === m.size ? m : next;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, [typing.size]);
+
+  // The database nudges "reads:<id>" whenever someone reads this chat; the
+  // nudge is empty, so ask again (read_receipts checks membership).
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase.channel(`reads:${conversationId}`);
+    channel.on("broadcast", { event: "read" }, () => {
+      refreshReceipts();
+    });
+    channel.subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [conversationId, refreshReceipts]);
+
+  // Typing: a private channel only this conversation's members may use (0023).
+  useEffect(() => {
+    const supabase = createClient();
+    let cancelled = false;
+    const channel = supabase.channel(`typing:${conversationId}`, { config: { private: true } });
+    channel.on("broadcast", { event: "typing" }, ({ payload }) => {
+      const id = (payload as { user_id?: string } | undefined)?.user_id;
+      if (!id || id === meId) return;
+      setTyping((m) => new Map(m).set(id, Date.now() + TYPING_SHOWN_MS));
+    });
+    ensureRealtimeAuth(supabase).then(() => {
+      if (cancelled) return;
+      channel.subscribe();
+      typingChannel.current = channel;
+    });
+    return () => {
+      cancelled = true;
+      typingChannel.current = null;
+      supabase.removeChannel(channel);
+    };
+  }, [conversationId, meId]);
+
+  const announceTyping = useCallback(() => {
+    const channel = typingChannel.current;
+    const t = Date.now();
+    if (!channel || channel.state !== "joined" || t - lastTypingSent.current < TYPING_EVERY_MS) return;
+    lastTypingSent.current = t;
+    channel.send({ type: "broadcast", event: "typing", payload: { user_id: meId } });
+  }, [meId]);
 
   // Latest messages / people, readable from inside the realtime callback
   const messagesRef = useRef(messages);
@@ -184,7 +296,14 @@ export function ChatThread({ conversationId, meId, peer, group, members, mention
             reply = data ?? null;
           }
         }
-        setMessages((m) => (m.some((x) => x.id === row.id) ? m : [...m, { ...row, story, reply }]));
+        setMessages((m) => (m.some((x) => x.id === row.id) ? m : [...m, { ...row, story, reply, reactions: [], opens: [] }]));
+        // Their message arrived, so they've stopped typing.
+        setTyping((t) => {
+          if (!t.has(row.sender_id)) return t;
+          const next = new Map(t);
+          next.delete(row.sender_id);
+          return next;
+        });
         if (row.sender_id !== meId && document.visibilityState === "visible") markRead();
       },
     );
@@ -194,6 +313,28 @@ export function ChatThread({ conversationId, meId, peer, group, members, mention
       const id = (payload.old as { id?: string }).id;
       if (id) setMessages((m) => withoutMessage(m, id));
     });
+    // Reactions (0023). Added and changed ones are filtered to this chat; a
+    // removal carries only its key, so every chat hears it and keeps its own.
+    const onReaction = (payload: { new: Record<string, unknown> }) => {
+      const r = payload.new as { message_id?: string; user_id?: string; emoji?: string };
+      if (r.message_id && r.user_id && r.emoji) setMessages((m) => withReaction(m, r.message_id!, r.user_id!, r.emoji!));
+    };
+    const reactionFilter = { schema: "public", table: "message_reactions", filter: `conversation_id=eq.${conversationId}` };
+    channel.on("postgres_changes", { event: "INSERT", ...reactionFilter }, onReaction);
+    channel.on("postgres_changes", { event: "UPDATE", ...reactionFilter }, onReaction);
+    channel.on("postgres_changes", { event: "DELETE", schema: "public", table: "message_reactions" }, (payload) => {
+      const r = payload.old as { message_id?: string; user_id?: string };
+      if (r.message_id && r.user_id) setMessages((m) => withReaction(m, r.message_id!, r.user_id!, null));
+    });
+    // Someone opened a view-once photo I sent.
+    channel.on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "message_opens", filter: `conversation_id=eq.${conversationId}` },
+      (payload) => {
+        const o = payload.new as { message_id?: string; user_id?: string; opened_at?: string };
+        if (o.message_id && o.user_id && o.opened_at) setMessages((m) => withOpen(m, o.message_id!, o.user_id!, o.opened_at!));
+      },
+    );
     ensureRealtimeAuth(supabase).then(() => {
       if (cancelled) return;
       channel.subscribe((status, err) => {
@@ -248,6 +389,63 @@ export function ChatThread({ conversationId, meId, peer, group, members, mention
     if (replyTo?.id === m.id) setReplyTo(null);
     const files = [m.image_path, m.audio_path].filter((p): p is string => Boolean(p));
     if (files.length) await supabase.storage.from("chat").remove(files);
+    if (m.once_path) await supabase.storage.from("once").remove([m.once_path]);
+  }
+
+  // React, change the emoji, or (null) take it back. Shown at once; undone if it fails.
+  const react = useCallback(
+    async (m: ChatMessage, emoji: string | null) => {
+      setActionFor(null);
+      setReactorsFor(null);
+      const before = m.reactions.find((r) => r.user_id === meId)?.emoji ?? null;
+      setMessages((list) => withReaction(list, m.id, meId, emoji));
+      const { error: err } = await createClient().rpc("react_to_message", { p_message_id: m.id, p_emoji: emoji });
+      if (err) {
+        setMessages((list) => withReaction(list, m.id, meId, before));
+        setError("Couldn't react to that message.");
+      }
+    },
+    [meId],
+  );
+
+  // Double-tap: ❤️, or take a ❤️ back.
+  const toggleHeart = useCallback(
+    (m: ChatMessage) => {
+      const mineNow = m.reactions.find((r) => r.user_id === meId)?.emoji;
+      react(m, mineNow === "❤️" ? null : "❤️");
+    },
+    [meId, react],
+  );
+
+  // A view-once photo sent to me: record the open, then fetch the file (the
+  // database lets me download it for two minutes after opening).
+  const openOnce = useCallback(
+    async (m: ChatMessage) => {
+      if (opening) return;
+      setOpening(m.id);
+      setError(null);
+      const supabase = createClient();
+      const { data: path, error: err } = await supabase.rpc("open_view_once", { p_message_id: m.id });
+      if (err || !path) {
+        setOpening(null);
+        const why = err?.message ?? "";
+        if (/ALREADY_OPENED/.test(why)) setMessages((list) => withOpen(list, m.id, meId, new Date().toISOString()));
+        return setError(
+          /ALREADY_OPENED/.test(why) ? "You've already opened this photo." : /EXPIRED/.test(why) ? "This photo has expired." : "Couldn't open this photo.",
+        );
+      }
+      const { data: blob, error: dlErr } = await supabase.storage.from("once").download(path);
+      setOpening(null);
+      if (dlErr || !blob) return setError("Couldn't load the photo. Try again within two minutes.");
+      setMessages((list) => withOpen(list, m.id, meId, new Date().toISOString()));
+      setOnceView(URL.createObjectURL(blob));
+    },
+    [meId, opening],
+  );
+
+  function closeOnce() {
+    if (onceView) URL.revokeObjectURL(onceView);
+    setOnceView(null);
   }
 
   async function copyText(m: ChatMessage) {
@@ -265,16 +463,20 @@ export function ChatThread({ conversationId, meId, peer, group, members, mention
     setError(null);
     const supabase = createClient();
 
+    // A view-once photo goes to the private "once" bucket instead (0023).
     let image_path: string | null = null;
+    let once_path: string | null = null;
     if (photo) {
-      image_path = newImagePath(meId);
+      const path = newImagePath(meId);
       const { error: upErr } = await supabase.storage
-        .from("chat")
-        .upload(image_path, photo.blob, { contentType: "image/jpeg", cacheControl: "604800" });
+        .from(viewOnce ? "once" : "chat")
+        .upload(path, photo.blob, { contentType: "image/jpeg", cacheControl: viewOnce ? "0" : "604800" });
       if (upErr) {
         setSending(false);
         return setError("Couldn't upload the photo.");
       }
+      if (viewOnce) once_path = path;
+      else image_path = path;
     }
 
     let audio_path: string | null = null;
@@ -291,7 +493,7 @@ export function ChatThread({ conversationId, meId, peer, group, members, mention
       }
     }
 
-    // Media expiry (image_expires_at / audio_expires_at) is stamped by the database.
+    // Media expiry (image_expires_at / audio_expires_at) and view_once are stamped by the database.
     const { data, error: err } = await supabase
       .from("messages")
       .insert({
@@ -299,25 +501,28 @@ export function ChatThread({ conversationId, meId, peer, group, members, mention
         sender_id: meId,
         body,
         image_path,
+        once_path,
         audio_path,
         audio_duration_ms,
         reply_to_id: replyTo?.id ?? null,
       })
-      .select("id, conversation_id, sender_id, body, story_id, image_path, image_expires_at, audio_path, audio_duration_ms, audio_expires_at, reply_to_id, kind, event, note_text, created_at")
+      .select(MESSAGE_COLUMNS)
       .single();
     setSending(false);
     if (err || !data) {
       const uploaded = [image_path, audio_path].filter((p): p is string => Boolean(p));
       if (uploaded.length) await supabase.storage.from("chat").remove(uploaded);
+      if (once_path) await supabase.storage.from("once").remove([once_path]);
       return setError(/blocked|violates/i.test(err?.message ?? "") ? "You can't message this person." : "Couldn't send. Check your connection.");
     }
     const reply = replyTo ? toReplyPreview(replyTo) : null;
     // Members can only insert kind = 'text', so event is always null here.
-    setMessages((m) => (m.some((x) => x.id === data.id) ? m : [...m, { ...data, event: null, story: null, reply }]));
+    setMessages((m) => (m.some((x) => x.id === data.id) ? m : [...m, { ...data, event: null, story: null, reply, reactions: [], opens: [] }]));
     setText("");
     setReplyTo(null);
     if (photo) URL.revokeObjectURL(photo.previewUrl);
     setPhoto(null);
+    setViewOnce(false);
     rec.reset();
     inputRef.current?.focus();
     markRead();
@@ -373,19 +578,41 @@ export function ChatThread({ conversationId, meId, peer, group, members, mention
           <Bubble
             m={m}
             mine={mine}
+            meId={meId}
+            isGroup={isGroup}
             grouped={grouped}
             sender={isGroup && !mine ? { name: nameOf(m.sender_id), avatar: people.get(m.sender_id) ?? null, showName: !grouped, showAvatar: endOfRun } : null}
             nameOf={nameOf}
             meUsername={meUsername}
             onReply={canSend ? () => startReply(m) : undefined}
             onActions={canSend || m.body || mine ? () => setActionFor(m) : undefined}
+            onDoubleTap={canSend ? () => toggleHeart(m) : undefined}
+            onShowReactions={() => setReactorsFor(m)}
             onOpenImage={setLightbox}
+            onOpenOnce={() => openOnce(m)}
+            opening={opening === m.id}
             scrollToReply={(id) => byId.has(id) && document.getElementById(`msg-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}
           />
         </div>
       );
     });
-  }, [messages, meId, meUsername, isGroup, people, nameOf, canSend, startReply]);
+  }, [messages, meId, meUsername, isGroup, people, nameOf, canSend, startReply, toggleHeart, openOnce, opening]);
+
+  // "Sent" / "Seen" under my message when it's the newest in the chat, as on Instagram.
+  const lastText = useMemo(() => [...messages].reverse().find((m) => m.kind !== "system"), [messages]);
+  const receipt =
+    lastText && lastText.sender_id === meId
+      ? receiptLabel(
+          lastText.created_at,
+          receipts,
+          isGroup,
+          isGroup ? Math.max(0, (group?.memberCount ?? 1) - 1) : 1,
+          (id) => (people.get(id)?.full_name ?? "Someone").split(" ")[0],
+          now,
+        )
+      : null;
+  // Only people I can see (members who blocked me never appear).
+  const typingPeople = [...typing.keys()].filter((id) => id !== meId && (!isGroup || people.has(id)));
 
   return (
     <div className="flex h-[calc(100dvh-3.5rem-3rem-3.5rem-env(safe-area-inset-bottom))] flex-col md:h-[calc(100dvh-3.5rem)]">
@@ -417,6 +644,26 @@ export function ChatThread({ conversationId, meId, peer, group, members, mention
         )}
 
         {list}
+        {receipt && <p className="mt-1 pr-1 text-right text-[11px] font-medium text-ink-faint">{receipt}</p>}
+        {typingPeople.length > 0 && (
+          <div className="mt-2 flex items-end gap-2" aria-live="polite">
+            {isGroup && (
+              <span className="w-7 shrink-0">
+                <Avatar path={people.get(typingPeople[0])?.avatar_path} name={people.get(typingPeople[0])?.full_name ?? ""} size={28} />
+              </span>
+            )}
+            <span className="flex items-center gap-1 rounded-2xl rounded-bl-md bg-surface-2 px-3.5 py-3" aria-label="typing">
+              <span className="size-1.5 animate-bounce rounded-full bg-ink-faint [animation-delay:-0.3s]" />
+              <span className="size-1.5 animate-bounce rounded-full bg-ink-faint [animation-delay:-0.15s]" />
+              <span className="size-1.5 animate-bounce rounded-full bg-ink-faint" />
+            </span>
+            {isGroup && (
+              <span className="pb-1 text-xs text-ink-faint">
+                {typingPeople.map((id) => (people.get(id)?.full_name ?? "Someone").split(" ")[0]).join(", ")} typing…
+              </span>
+            )}
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
 
@@ -442,11 +689,32 @@ export function ChatThread({ conversationId, meId, peer, group, members, mention
             <div className="flex items-center gap-3 px-3 pt-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={photo.previewUrl} alt="" className="h-20 w-20 rounded-lg object-cover" />
-              <p className="flex-1 text-xs text-ink-muted">
-                <Clock className="mr-1 inline size-3.5" />
-                Disappears {CHAT_PHOTO_DAYS} days after sending.
-              </p>
-              <button type="button" onClick={() => { URL.revokeObjectURL(photo.previewUrl); setPhoto(null); }} aria-label="Remove photo" className="rounded-full p-1.5 text-ink-muted hover:bg-surface-2">
+              <div className="flex-1 space-y-1.5">
+                <button
+                  type="button"
+                  onClick={() => setViewOnce((v) => !v)}
+                  aria-pressed={viewOnce}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold transition ${
+                    viewOnce ? "border-brand bg-brand text-brand-ink" : "border-line text-ink-muted hover:bg-surface-2"
+                  }`}
+                >
+                  <Eye className="size-3.5" /> View once
+                </button>
+                <p className="text-xs text-ink-muted">
+                  <Clock className="mr-1 inline size-3.5" />
+                  {viewOnce ? "They can open it once. You won't see it again." : `Disappears ${CHAT_PHOTO_DAYS} days after sending.`}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  URL.revokeObjectURL(photo.previewUrl);
+                  setPhoto(null);
+                  setViewOnce(false);
+                }}
+                aria-label="Remove photo"
+                className="rounded-full p-1.5 text-ink-muted hover:bg-surface-2"
+              >
                 <X className="size-4" />
               </button>
             </div>
@@ -502,6 +770,7 @@ export function ChatThread({ conversationId, meId, peer, group, members, mention
                 value={text}
                 onChange={(e) => {
                   setText(e.target.value);
+                  if (e.target.value.trim()) announceTyping();
                   if (isGroup) mentions.sync();
                 }}
                 onSelect={isGroup ? mentions.sync : undefined}
@@ -542,6 +811,25 @@ export function ChatThread({ conversationId, meId, peer, group, members, mention
 
       {actionFor && (
         <Sheet title={actionFor.sender_id === meId ? "Your message" : "Message"} onClose={closeActions}>
+          {canSend && actionFor.kind === "text" && (
+            <div className="mb-3 flex justify-between rounded-xl border border-line px-2 py-1.5">
+              {QUICK_REACTIONS.map((e) => {
+                const chosen = actionFor.reactions.find((r) => r.user_id === meId)?.emoji === e;
+                return (
+                  <button
+                    key={e}
+                    type="button"
+                    onClick={() => react(actionFor, chosen ? null : e)}
+                    aria-label={chosen ? `Remove ${e}` : `React ${e}`}
+                    aria-pressed={chosen}
+                    className={`rounded-full p-1.5 text-2xl leading-none transition hover:scale-110 ${chosen ? "bg-brand-soft" : "hover:bg-surface-2"}`}
+                  >
+                    {e}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <div className="divide-y divide-line overflow-hidden rounded-xl border border-line">
             {canSend && (
               <button
@@ -569,6 +857,51 @@ export function ChatThread({ conversationId, meId, peer, group, members, mention
         </Sheet>
       )}
 
+      {reactorsFor && (
+        <Sheet title="Reactions" onClose={closeReactors}>
+          <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line">
+            {reactorsFor.reactions.map((r) => {
+              const own = r.user_id === meId;
+              const person = people.get(r.user_id);
+              return (
+                <li key={r.user_id}>
+                  <button
+                    type="button"
+                    disabled={!own}
+                    onClick={() => react(reactorsFor, null)}
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left enabled:hover:bg-surface-2"
+                  >
+                    <Avatar path={person?.avatar_path} name={own ? "You" : (person?.full_name ?? FORMER)} size={32} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-semibold">{own ? "You" : (person?.full_name ?? FORMER)}</span>
+                      {own && <span className="block text-xs text-ink-muted">Tap to remove</span>}
+                    </span>
+                    <span className="text-2xl leading-none">{r.emoji}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </Sheet>
+      )}
+
+      {onceView && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black p-4"
+          onClick={closeOnce}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={onceView} alt="" draggable={false} className="pointer-events-none max-h-full max-w-full rounded-lg object-contain select-none" />
+          <p className="absolute top-5 left-1/2 -translate-x-1/2 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold text-white">
+            View once · closes for good
+          </p>
+          <button type="button" aria-label="Close" className="absolute top-4 right-4 rounded-full bg-white/15 p-2 text-white">
+            <X className="size-6" />
+          </button>
+        </div>
+      )}
+
       {lightbox && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" onClick={() => setLightbox(null)}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -588,30 +921,46 @@ type SenderInfo = { name: string; avatar: ChatPeer | null; showName: boolean; sh
 function Bubble({
   m,
   mine,
+  meId,
+  isGroup,
   grouped,
   sender,
   nameOf,
   meUsername,
   onReply,
   onActions,
+  onDoubleTap,
+  onShowReactions,
   onOpenImage,
+  onOpenOnce,
+  opening,
   scrollToReply,
 }: {
   m: ChatMessage;
   mine: boolean;
+  meId: string;
+  isGroup: boolean;
   grouped: boolean;
   sender: SenderInfo | null; // set for other people's messages in a group
   nameOf: (id: string) => string;
   meUsername: string;
   onReply?: () => void;
-  onActions?: () => void; // long-press (touch), right-click or ⋯: reply / copy / unsend
+  onActions?: () => void; // long-press (touch), right-click or ⋯: react / reply / copy / unsend
+  onDoubleTap?: () => void; // ❤️
+  onShowReactions: () => void;
   onOpenImage: (src: string) => void;
+  onOpenOnce: () => void;
+  opening: boolean;
   scrollToReply: (id: string) => void;
 }) {
   const [dx, setDx] = useState(0);
   const start = useRef<{ x: number; y: number; id: number } | null>(null);
   const fired = useRef(false);
   const press = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressed = useRef(false);
+  const moved = useRef(false);
+  const lastTap = useRef(0);
+  const pointerKind = useRef("mouse");
   const THRESHOLD = 56;
 
   function cancelPress() {
@@ -626,15 +975,19 @@ function Bubble({
   }, []);
 
   function onPointerDown(e: React.PointerEvent) {
-    if (e.pointerType === "mouse" || (!onReply && !onActions)) return;
+    pointerKind.current = e.pointerType;
+    if (e.pointerType === "mouse" || (!onReply && !onActions && !onDoubleTap)) return;
     start.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
     fired.current = false;
+    longPressed.current = false;
+    moved.current = false;
     cancelPress();
     // Holding still for half a second opens the message actions.
     if (onActions) {
       press.current = setTimeout(() => {
         press.current = null;
         start.current = null;
+        longPressed.current = true;
         setDx(0);
         if (navigator.vibrate) navigator.vibrate(10);
         onActions();
@@ -646,7 +999,10 @@ function Bubble({
     if (!s || e.pointerId !== s.id) return;
     const ddx = e.clientX - s.x;
     const ddy = e.clientY - s.y;
-    if (Math.abs(ddx) > 8 || Math.abs(ddy) > 8) cancelPress();
+    if (Math.abs(ddx) > 8 || Math.abs(ddy) > 8) {
+      moved.current = true;
+      cancelPress();
+    }
     if (!onReply) return;
     if (Math.abs(ddy) > Math.abs(ddx) + 8) return; // vertical scroll wins
     // Swipe toward the centre: right for their bubbles, left for mine
@@ -661,13 +1017,25 @@ function Bubble({
   function onPointerEnd() {
     cancelPress();
     if (fired.current && onReply) onReply();
+    // Two quick taps in place: ❤️ (as on Instagram).
+    else if (start.current && !moved.current && !longPressed.current && onDoubleTap) {
+      const t = Date.now();
+      if (t - lastTap.current < 300) {
+        lastTap.current = 0;
+        if (navigator.vibrate) navigator.vibrate(10);
+        onDoubleTap();
+      } else lastTap.current = t;
+    }
     start.current = null;
     setDx(0);
   }
 
   const storySrc = m.story ? publicUrl("stories", m.story.image_path) : null;
   const imgSrc = m.image_path ? publicUrl("chat", m.image_path) : null;
-  const photoExpired = !m.image_path && m.image_expires_at !== null;
+  // A view-once photo has no image_path; it has its own states below.
+  const photoExpired = !m.view_once && !m.image_path && m.image_expires_at !== null;
+  const openedByMe = m.opens.some((o) => o.user_id === meId);
+  const reactionGroups = groupReactions(m.reactions);
   const audioSrc = m.audio_path ? publicUrl("chat", m.audio_path) : null;
   const voiceExpired = !m.audio_path && m.audio_expires_at !== null;
   const mediaExpiresAt = imgSrc ? m.image_expires_at : audioSrc ? m.audio_expires_at : null;
@@ -684,6 +1052,11 @@ function Bubble({
         if (!onActions) return;
         e.preventDefault();
         onActions();
+      }}
+      onDoubleClick={(e) => {
+        // Touch has its own double-tap above; this is the mouse.
+        if (!onDoubleTap || pointerKind.current !== "mouse" || (e.target as HTMLElement).closest("button, a, audio")) return;
+        onDoubleTap();
       }}
       style={{ transform: dx ? `translateX(${dx}px)` : undefined, transition: dx ? "none" : "transform 150ms ease-out" }}
     >
@@ -774,6 +1147,25 @@ function Bubble({
               <img src={imgSrc} alt="" loading="lazy" className="max-h-80 w-auto max-w-full object-cover" draggable={false} />
             </button>
           )}
+          {m.view_once &&
+            (mine ? (
+              <p className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium">
+                {m.opens.length > 0 ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                {m.opens.length === 0 ? "View-once photo" : isGroup ? `Opened by ${m.opens.length}` : "Opened"}
+              </p>
+            ) : openedByMe ? (
+              <p className="flex items-center gap-1.5 px-3.5 py-2 text-sm italic opacity-70">
+                <EyeOff className="size-4" /> Opened
+              </p>
+            ) : m.once_path ? (
+              <button type="button" onClick={onOpenOnce} disabled={opening} className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold">
+                {opening ? <Loader2 className="size-4 animate-spin" /> : <Eye className="size-4" />} Tap to view photo
+              </button>
+            ) : (
+              <p className="flex items-center gap-1.5 px-3.5 py-2 text-sm italic opacity-70">
+                <Clock className="size-3.5" /> Photo expired
+              </p>
+            ))}
           {photoExpired && (
             <p className="flex items-center gap-1.5 px-3.5 py-2 text-sm italic opacity-70">
               <Clock className="size-3.5" /> Photo expired
@@ -803,6 +1195,21 @@ function Bubble({
             </p>
           )}
         </div>
+
+        {/* Reactions, tucked under the bubble's edge as on Instagram */}
+        {reactionGroups.length > 0 && (
+          <button
+            type="button"
+            onClick={onShowReactions}
+            aria-label="See who reacted"
+            className={`relative z-10 -mt-1.5 flex items-center gap-0.5 rounded-full bg-surface-2 px-1.5 py-0.5 text-sm leading-none ring-2 ring-canvas ${mine ? "mr-2" : "ml-2"}`}
+          >
+            {reactionGroups.slice(0, 3).map((g) => (
+              <span key={g.emoji}>{g.emoji}</span>
+            ))}
+            {m.reactions.length > 1 && <span className="ml-0.5 text-xs font-semibold text-ink-muted">{m.reactions.length}</span>}
+          </button>
+        )}
       </div>
     </div>
   );

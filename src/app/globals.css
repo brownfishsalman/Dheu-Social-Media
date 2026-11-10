@@ -34,25 +34,27 @@
   --shadow: 0 1px 2px rgb(0 39 61 / 0.06), 0 6px 20px -8px rgb(0 39 61 / 0.14);
 }
 
+/* Dark: a soft, faintly cool black (easier on the eyes than navy or pure
+   black) with the same teal accents. Same values as the Android app. */
 .dark {
-  --canvas: #061c2b;
-  --surface: #00273d; /* exactly the logo background */
-  --surface-2: #0c3549;
-  --line: #17445a;
-  --ink: #eaf2f6;
-  --ink-muted: #9db9c8;
-  --ink-faint: #6c8a9b;
+  --canvas: #0a0c0e;
+  --surface: #0f1215;
+  --surface-2: #1e2327;
+  --line: #262c31;
+  --ink: #e6ecef;
+  --ink-muted: #9aa6ae;
+  --ink-faint: #6e7a82;
   --wordmark: #f2efeb;
 
   --brand: #2ba3bf;
   --brand-strong: #5fc3d8;
-  --brand-soft: #0f3e52;
+  --brand-soft: #12313b;
   --brand-ink: #03202e;
   --wave-a: #bddee6; /* gradient: aqua */
   --wave-b: #1589a5; /* gradient: teal */
 
   --danger: #f28b8b;
-  --danger-soft: #4a1f22;
+  --danger-soft: #3d1a1d;
   --like: #f06b70;
 
   --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -10px rgb(0 0 0 / 0.6);

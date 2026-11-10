@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -43,6 +44,8 @@ data class MessageInsert(
     @SerialName("audio_duration_ms") val audioDurationMs: Long? = null,
     @SerialName("reply_to_id") val replyToId: String? = null,
     @SerialName("note_text") val noteText: String? = null,
+    /** A view-once photo's file in the private "once" bucket (0023). */
+    @SerialName("once_path") val oncePath: String? = null,
 )
 
 /** A recorded voice message waiting to be sent: an AAC .m4a in the app's cache. */
@@ -59,6 +62,21 @@ sealed interface ChatEvent {
     data class Deleted(val id: String) : ChatEvent
     /** The channel joined again after a gap; reload to catch up. */
     data object Rejoined : ChatEvent
+    /** A reaction was added or changed, or (emoji null) taken back. */
+    data class Reacted(val messageId: String, val userId: String, val emoji: String?) : ChatEvent
+    /** Someone opened a view-once photo. */
+    data class Opened(val messageId: String, val userId: String, val openedAt: String) : ChatEvent
+}
+
+/** read_receipts_inbox(): [Receipt] for every chat at once (0023). */
+@Serializable
+data class InboxReceipt(
+    @SerialName("conversation_id") val conversationId: String,
+    @SerialName("user_id") val userId: String,
+    @SerialName("last_read_at") val lastReadAt: String,
+    @SerialName("joined_at") val joinedAt: String,
+) {
+    fun toReceipt() = Receipt(userId, lastReadAt, joinedAt)
 }
 
 /**
@@ -86,7 +104,7 @@ object Chat {
         val rows = client.from("conversations").select(
             Columns.raw(
                 "id, is_group, title, last_message_at, $MEMBER_EMBED, reads:conversation_reads(cleared_at), " +
-                    "messages(body, sender_id, created_at, story_id, image_path, audio_path, note_text, kind, " +
+                    "messages(body, sender_id, created_at, story_id, image_path, audio_path, note_text, kind, view_once, " +
                     "sender:profiles!messages_sender_id_fkey(full_name))",
             ),
         ) {
@@ -95,6 +113,9 @@ object Chat {
             limit(1, referencedTable = "messages")
         }.decodeList<ConversationRow>()
         val unread = Backend.db.rpc("unread_counts").decodeList<UnreadRow>().associate { it.conversationId to it.unread.toInt() }
+        // "Seen" under my last message; the inbox still works if this fails.
+        val receipts = runCatching { Backend.db.rpc("read_receipts_inbox").decodeList<InboxReceipt>() }.getOrDefault(emptyList())
+            .groupBy({ it.conversationId }, { it.toReceipt() })
 
         return rows.mapNotNull { c ->
             val members = visible(c.members)
@@ -112,6 +133,7 @@ object Chat {
                 memberCount = c.members.size,
                 last = last,
                 unread = unread[c.id] ?: 0,
+                receipts = receipts[c.id].orEmpty(),
             )
         }
     }
@@ -149,7 +171,11 @@ object Chat {
     suspend fun insertMessage(message: MessageInsert): Message =
         client.from("messages").insert(message) { select(Columns.raw(MESSAGE_SELECT)) }.decodeSingle()
 
-    /** Uploads the photo or voice message first (if any); if the message can't be saved, the file is removed again. */
+    /**
+     * Uploads the photo or voice message first (if any); if the message can't be
+     * saved, the file is removed again. A view-once photo goes to the private
+     * "once" bucket instead of "chat".
+     */
     suspend fun send(
         conversationId: String,
         me: String,
@@ -157,12 +183,16 @@ object Chat {
         photo: Images.Encoded?,
         replyToId: String?,
         voice: VoiceClip? = null,
+        viewOnce: Boolean = false,
     ): Message {
-        val imagePath = photo?.let {
+        val photoPath = photo?.let {
             val path = Images.newPath(me)
-            uploadFile(Buckets.CHAT, path, it.bytes, ContentType.Image.JPEG, CACHE_WEEK)
+            if (viewOnce) uploadFile(Buckets.ONCE, path, it.bytes, ContentType.Image.JPEG, 0)
+            else uploadFile(Buckets.CHAT, path, it.bytes, ContentType.Image.JPEG, CACHE_WEEK)
             path
         }
+        val imagePath = photoPath.takeUnless { viewOnce }
+        val oncePath = photoPath.takeIf { viewOnce }
         val audioPath = voice?.let {
             val path = "$me/${UUID.randomUUID()}.m4a"
             val bytes = withContext(Dispatchers.IO) { it.file.readBytes() }
@@ -177,10 +207,12 @@ object Chat {
                     audioPath = audioPath,
                     audioDurationMs = voice?.durationMs,
                     replyToId = replyToId,
+                    oncePath = oncePath,
                 ),
             )
         } catch (e: Exception) {
             removeFiles(Buckets.CHAT, listOfNotNull(imagePath, audioPath))
+            removeFiles(Buckets.ONCE, listOfNotNull(oncePath))
             throw e
         }
     }
@@ -193,7 +225,29 @@ object Chat {
         }.decodeList<IdRow>()
         if (deleted.isEmpty()) return false
         removeFiles(Buckets.CHAT, listOfNotNull(m.imagePath, m.audioPath))
+        removeFiles(Buckets.ONCE, listOfNotNull(m.oncePath))
         return true
+    }
+
+    /** React, change the emoji, or (null) take the reaction back (0023). */
+    suspend fun react(messageId: String, emoji: String?) {
+        Backend.db.rpc(
+            "react_to_message",
+            buildJsonObject {
+                put("p_message_id", messageId)
+                put("p_emoji", emoji)
+            },
+        )
+    }
+
+    /**
+     * Open a view-once photo sent to me: the database records the open (once
+     * only; a retry within two minutes is allowed), and the file can then be
+     * downloaded for two minutes. Throws with ALREADY_OPENED / EXPIRED.
+     */
+    suspend fun openViewOnce(messageId: String): ByteArray {
+        val path = Backend.db.rpc("open_view_once", buildJsonObject { put("p_message_id", messageId) }).decodeAs<String>()
+        return Backend.storage.from(Buckets.ONCE).downloadAuthenticated(path)
     }
 
     suspend fun markRead(conversationId: String) {
@@ -308,6 +362,13 @@ object Chat {
         Backend.db.rpc("mark_announcements_read")
     }
 
+    private fun reacted(r: JsonObject, removed: Boolean): ChatEvent.Reacted? {
+        val messageId = r.string("message_id") ?: return null
+        val userId = r.string("user_id") ?: return null
+        val emoji = if (removed) null else r.string("emoji") ?: return null
+        return ChatEvent.Reacted(messageId, userId, emoji)
+    }
+
     /**
      * New and unsent messages in one conversation. Inserts are filtered to this
      * conversation; Realtime can't filter DELETE events (they carry only the id),
@@ -320,8 +381,35 @@ object Chat {
             filter("conversation_id", FilterOperator.EQ, conversationId)
         }
         val deletes = channel.postgresChangeFlow<PostgresAction.Delete>("public") { table = "messages" }
+        // Reactions and view-once opens (0023). A removed reaction carries only
+        // its key, so (as with unsent messages) every chat hears it.
+        val reactionAdds = channel.postgresChangeFlow<PostgresAction.Insert>("public") {
+            table = "message_reactions"
+            filter("conversation_id", FilterOperator.EQ, conversationId)
+        }
+        val reactionChanges = channel.postgresChangeFlow<PostgresAction.Update>("public") {
+            table = "message_reactions"
+            filter("conversation_id", FilterOperator.EQ, conversationId)
+        }
+        val reactionRemovals = channel.postgresChangeFlow<PostgresAction.Delete>("public") { table = "message_reactions" }
+        val opens = channel.postgresChangeFlow<PostgresAction.Insert>("public") {
+            table = "message_opens"
+            filter("conversation_id", FilterOperator.EQ, conversationId)
+        }
         launch { inserts.collect { a -> a.record.string("id")?.let { send(ChatEvent.Inserted(it)) } } }
         launch { deletes.collect { a -> a.oldRecord.string("id")?.let { send(ChatEvent.Deleted(it)) } } }
+        launch { reactionAdds.collect { a -> reacted(a.record, removed = false)?.let { send(it) } } }
+        launch { reactionChanges.collect { a -> reacted(a.record, removed = false)?.let { send(it) } } }
+        launch { reactionRemovals.collect { a -> reacted(a.oldRecord, removed = true)?.let { send(it) } } }
+        launch {
+            opens.collect { a ->
+                val r = a.record
+                val messageId = r.string("message_id")
+                val userId = r.string("user_id")
+                val at = r.string("opened_at")
+                if (messageId != null && userId != null && at != null) send(ChatEvent.Opened(messageId, userId, at))
+            }
+        }
         launch { rejoins(channel).collect { send(ChatEvent.Rejoined) } }
         channel.subscribe()
         try {

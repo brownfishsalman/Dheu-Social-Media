@@ -55,4 +55,6 @@ object Buckets {
     const val POSTS = "posts"
     const val STORIES = "stories"
     const val CHAT = "chat"
+    /** View-once photos: private, downloadable only right after opening (0023). */
+    const val ONCE = "once"
 }

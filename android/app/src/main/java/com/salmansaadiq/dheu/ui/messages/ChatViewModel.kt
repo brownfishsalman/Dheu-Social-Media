@@ -17,11 +17,16 @@ import com.salmansaadiq.dheu.data.Person
 import com.salmansaadiq.dheu.data.Receipt
 import com.salmansaadiq.dheu.data.VoiceClip
 import com.salmansaadiq.dheu.data.friendly
+import com.salmansaadiq.dheu.data.Typing
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonNull
+import java.time.Instant
+
+private const val TYPING_SHOWN_MS = 5_000L // how long "typing…" stays after the last signal
 
 class ChatViewModel(private val conversationId: String, private val me: String) : ViewModel() {
     var info by mutableStateOf<ConversationInfo?>(null)
@@ -45,6 +50,14 @@ class ChatViewModel(private val conversationId: String, private val me: String) 
     /** When the others last read this chat, for "Seen" under my last message. */
     var receipts by mutableStateOf<List<Receipt>>(emptyList())
         private set
+    /** Who is typing right now: user id -> shown until (ms). */
+    var typing by mutableStateOf<Map<String, Long>>(emptyMap())
+        private set
+    /** The view-once photo being opened, if any. */
+    var opening by mutableStateOf<String?>(null)
+        private set
+
+    private val typingLink = Typing.open(conversationId)
 
     init {
         load()
@@ -54,11 +67,84 @@ class ChatViewModel(private val conversationId: String, private val me: String) 
                     is ChatEvent.Inserted -> onInserted(event.id)
                     is ChatEvent.Deleted -> removeLocally(event.id)
                     ChatEvent.Rejoined -> catchUp()
+                    is ChatEvent.Reacted -> update(event.messageId) { it.withReaction(event.userId, event.emoji) }
+                    is ChatEvent.Opened -> update(event.messageId) { it.withOpen(event.userId, event.openedAt) }
                 }
             }
         }
         viewModelScope.launch {
             Chat.readNudges(conversationId).catch { }.collect { refreshReceipts() }
+        }
+        viewModelScope.launch {
+            typingLink.typing.collect { id ->
+                if (id != me) typing = typing + (id to System.currentTimeMillis() + TYPING_SHOWN_MS)
+            }
+        }
+        // "typing…" fades out on its own.
+        viewModelScope.launch {
+            while (true) {
+                delay(1_000)
+                if (typing.isNotEmpty()) {
+                    val now = System.currentTimeMillis()
+                    val live = typing.filterValues { it > now }
+                    if (live.size != typing.size) typing = live
+                }
+            }
+        }
+    }
+
+    override fun onCleared() {
+        typingLink.close()
+    }
+
+    private fun update(messageId: String, change: (Message) -> Message) {
+        if (messages.none { it.id == messageId }) return
+        messages = messages.map { if (it.id == messageId) change(it) else it }
+    }
+
+    fun announceTyping() = typingLink.announce(me)
+
+    /** React, change the emoji, or (null) take it back. Shown at once; undone if it fails. */
+    fun react(m: Message, emoji: String?) {
+        val before = messages.firstOrNull { it.id == m.id }?.reactionOf(me)
+        update(m.id) { it.withReaction(me, emoji) }
+        viewModelScope.launch {
+            try {
+                Chat.react(m.id, emoji)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                update(m.id) { it.withReaction(me, before) }
+                error = e.friendly("Couldn't react to that message.")
+            }
+        }
+    }
+
+    /** Double-tap: ❤️, or take a ❤️ back. */
+    fun toggleHeart(m: Message) = react(m, if (m.reactionOf(me) == "❤️") null else "❤️")
+
+    /** A view-once photo sent to me: record the open, then hand over the file to show. */
+    fun openViewOnce(m: Message, show: (ByteArray) -> Unit) {
+        if (opening != null) return
+        opening = m.id
+        viewModelScope.launch {
+            try {
+                val bytes = Chat.openViewOnce(m.id)
+                update(m.id) { it.withOpen(me, Instant.now().toString()) }
+                show(bytes)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val text = e.message.orEmpty()
+                if ("ALREADY_OPENED" in text) update(m.id) { it.withOpen(me, Instant.now().toString()) }
+                error = when {
+                    "ALREADY_OPENED" in text -> "You've already opened this photo."
+                    "EXPIRED" in text -> "This photo has expired."
+                    else -> e.friendly("Couldn't load the photo. Try again within two minutes.")
+                }
+            } finally {
+                opening = null
+            }
         }
     }
 
@@ -108,6 +194,8 @@ class ChatViewModel(private val conversationId: String, private val me: String) 
         val full = runCatching { Chat.message(id) }.getOrNull() ?: return
         learnNames(listOf(full))
         if (messages.none { it.id == id }) messages = messages + full
+        // Their message arrived, so they've stopped typing.
+        if (full.senderId in typing) typing = typing - full.senderId
         if (full.senderId != me) markRead()
         // "Rafi renamed the group", "Tania added Salman": refresh the name and the members.
         if (full.isSystem) refreshInfo()
@@ -166,14 +254,22 @@ class ChatViewModel(private val conversationId: String, private val me: String) 
     }
 
     /** Returns true when sent (so the composer can clear). */
-    fun send(context: Context, body: String, photo: Uri?, replyTo: Message?, voice: VoiceClip?, onDone: (Boolean) -> Unit) {
+    fun send(
+        context: Context,
+        body: String,
+        photo: Uri?,
+        replyTo: Message?,
+        voice: VoiceClip?,
+        viewOnce: Boolean = false,
+        onDone: (Boolean) -> Unit,
+    ) {
         if (sending) return
         sending = true
         error = null
         viewModelScope.launch {
             try {
                 val encoded = photo?.let { Images.encode(context, it, Images.POST) }
-                val sent = Chat.send(conversationId, me, body.trim(), encoded, replyTo?.id, voice)
+                val sent = Chat.send(conversationId, me, body.trim(), encoded, replyTo?.id, voice, viewOnce = viewOnce && encoded != null)
                 if (messages.none { it.id == sent.id }) messages = messages + sent
                 markRead()
                 onDone(true)

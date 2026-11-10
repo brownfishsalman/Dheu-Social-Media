@@ -48,6 +48,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.salmansaadiq.dheu.R
 import com.salmansaadiq.dheu.core.expiresIn
 import com.salmansaadiq.dheu.core.timeAgo
+import java.time.Instant
 import com.salmansaadiq.dheu.data.Announcement
 import com.salmansaadiq.dheu.data.Chat
 import com.salmansaadiq.dheu.data.ConversationSummary
@@ -214,14 +215,24 @@ private fun ConversationRow(c: ConversationSummary, me: String, onOpen: () -> Un
         c.isGroup -> "${(last.sender?.fullName ?: "Someone").split(" ").first()}: "
         else -> ""
     }
+    // My message was the last one and someone has seen it: say so, as on Instagram.
+    val seen = if (last != null && last.kind != "system" && last.senderId == me) {
+        receiptLabel(
+            last.createdAt, c.receipts, c.isGroup, if (c.isGroup) c.memberCount - 1 else 1,
+            { id -> c.members.firstOrNull { it.id == id }?.fullName?.substringBefore(' ') ?: "Someone" },
+            Instant.now(),
+        )
+    } else null
     val preview = when {
         last == null -> if (c.isGroup) "${c.memberCount} members · No messages yet" else "No messages yet"
         last.kind == "system" -> last.body
+        seen != null && seen != "Sent" -> if (c.isGroup) seen else "Seen"
         else -> buildString {
             append(who)
             if (last.storyId != null) append("Replied to a story: ")
             if (last.noteText != null) append("Replied to a note: ")
             if (last.imagePath != null) append("📷 Photo ")
+            if (last.viewOnce) append("📷 View-once photo ")
             if (last.audioPath != null) append("🎤 Voice message ")
             append(last.body)
         }

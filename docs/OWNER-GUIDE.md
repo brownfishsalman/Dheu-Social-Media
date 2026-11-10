@@ -51,7 +51,8 @@ Useful commands:
    - `supabase/migrations/0019_delete_chat_unsend.sql`
    - `supabase/migrations/0020_mentions_app_push.sql` (@mentions, and push for the Android app)
    - `supabase/migrations/0021_function_grants.sql` (database functions can only be called when signed in; no code depends on it)
-   - `supabase/migrations/0022_read_receipts.sql` (read receipts in the Android app; the app works without it, minus "Seen")
+   - `supabase/migrations/0022_read_receipts.sql` (read receipts; the apps work without it, minus "Seen")
+   - `supabase/migrations/0023_chat_extras.sql` (reactions, typing, view-once photos, "Seen" in the inbox; run before deploying the code that uses it)
    (0016–0020 must run before deploying the code that uses them.)
 2. **Turn off "Confirm email"** – Supabase → Authentication → Sign In / Providers → Email → untick _Confirm email_. (Accounts are created by the app with the invite code, so no confirmation email is needed. The free tier can't send emails to arbitrary addresses anyway.)
 3. **Keys** – Supabase → Project Settings → API keys. Put the URL, the _publishable_ key and the _secret_ key in `.env.local` (copy `.env.example`).

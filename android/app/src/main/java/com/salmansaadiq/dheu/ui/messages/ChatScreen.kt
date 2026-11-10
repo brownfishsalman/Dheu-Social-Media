@@ -5,7 +5,15 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
 import android.net.Uri
+import android.view.WindowManager
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -25,7 +33,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -58,8 +68,10 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -70,6 +82,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -86,6 +99,7 @@ import com.salmansaadiq.dheu.data.Backend
 import com.salmansaadiq.dheu.data.Buckets
 import com.salmansaadiq.dheu.data.Message
 import com.salmansaadiq.dheu.data.Person
+import com.salmansaadiq.dheu.data.QUICK_REACTIONS
 import com.salmansaadiq.dheu.data.Receipt
 import com.salmansaadiq.dheu.data.VOICE_MAX_SECONDS
 import com.salmansaadiq.dheu.data.VoiceClip
@@ -165,9 +179,11 @@ private fun ChatBody(vm: ChatViewModel, isGroup: Boolean, canSend: Boolean, bloc
     val c = Dheu.colors
     val list = rememberLazyListState()
     var actionsFor by remember { mutableStateOf<Message?>(null) }
+    var reactorsFor by remember { mutableStateOf<Message?>(null) }
     var confirmUnsend by remember { mutableStateOf<Message?>(null) }
     var replyTo by remember { mutableStateOf<Message?>(null) }
     var lightbox by remember { mutableStateOf<String?>(null) }
+    var onceView by remember { mutableStateOf<ByteArray?>(null) } // an opened view-once photo
 
     fun nameOf(id: String) = if (id == me) "You" else vm.people[id]?.fullName ?: FORMER
 
@@ -187,7 +203,7 @@ private fun ChatBody(vm: ChatViewModel, isGroup: Boolean, canSend: Boolean, bloc
     val receiptFor = vm.messages.lastOrNull { !it.isSystem }?.takeIf { it.senderId == me }
     val receipt = receiptFor?.let { m ->
         val others = vm.info?.members.orEmpty().count { it.id != me }
-        receiptLabel(m, vm.receipts, isGroup, others, { id -> vm.people[id]?.fullName?.substringBefore(' ') ?: "Someone" }, now)
+        receiptLabel(m.createdAt, vm.receipts, isGroup, others, { id -> vm.people[id]?.fullName?.substringBefore(' ') ?: "Someone" }, now)
     }
 
     Column(Modifier.fillMaxSize().imePadding()) {
@@ -197,6 +213,11 @@ private fun ChatBody(vm: ChatViewModel, isGroup: Boolean, canSend: Boolean, bloc
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
             modifier = Modifier.weight(1f).fillMaxWidth(),
         ) {
+            // "typing…" sits below the newest message (the list is laid out bottom-up).
+            val typingIds = vm.typing.keys.filter { it != me && (!isGroup || it in vm.people) }
+            if (typingIds.isNotEmpty()) {
+                item(key = "typing") { TypingBubble(typingIds.map { vm.people[it] }, isGroup) }
+            }
             itemsIndexed(reversed, key = { _, m -> m.id }) { i, m ->
                 val index = vm.messages.lastIndex - i // position in chronological order
                 val prev = vm.messages.getOrNull(index - 1)
@@ -215,6 +236,7 @@ private fun ChatBody(vm: ChatViewModel, isGroup: Boolean, canSend: Boolean, bloc
                         Bubble(
                             m = m,
                             mine = m.senderId == me,
+                            me = me,
                             grouped = grouped,
                             endOfRun = endOfRun,
                             sender = if (isGroup && m.senderId != me) vm.people[m.senderId] else null,
@@ -225,7 +247,11 @@ private fun ChatBody(vm: ChatViewModel, isGroup: Boolean, canSend: Boolean, bloc
                             myUsername = myProfile?.username,
                             nameOf = ::nameOf,
                             onLongPress = { actionsFor = m },
+                            onDoubleTap = if (canSend) ({ vm.toggleHeart(m) }) else null,
+                            onShowReactions = { reactorsFor = m },
                             onOpenImage = { lightbox = it },
+                            opening = vm.opening == m.id,
+                            onOpenOnce = { vm.openViewOnce(m) { bytes -> onceView = bytes } },
                         )
                         if (receipt != null && m.id == receiptFor.id) {
                             Text(
@@ -265,6 +291,23 @@ private fun ChatBody(vm: ChatViewModel, isGroup: Boolean, canSend: Boolean, bloc
 
     actionsFor?.let { m ->
         DheuSheet(if (m.senderId == me) "Your message" else "Message", onDismiss = { actionsFor = null }) {
+            if (canSend && !m.isSystem) {
+                val mineNow = vm.messages.firstOrNull { it.id == m.id }?.reactionOf(me)
+                Row(
+                    Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(16.dp)).border(1.dp, c.line, RoundedCornerShape(16.dp))
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    QUICK_REACTIONS.forEach { e ->
+                        val chosen = mineNow == e
+                        Box(
+                            Modifier.size(46.dp).clip(CircleShape).background(if (chosen) c.brandSoft else Color.Transparent)
+                                .clickable { vm.react(m, if (chosen) null else e); actionsFor = null },
+                            contentAlignment = Alignment.Center,
+                        ) { Text(e, fontSize = 26.sp) }
+                    }
+                }
+            }
             if (canSend) SheetAction(Lucide.Reply, "Reply", { replyTo = m; actionsFor = null })
             if (m.body.isNotEmpty()) SheetAction(Lucide.Copy, "Copy text", {
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -286,11 +329,86 @@ private fun ChatBody(vm: ChatViewModel, isGroup: Boolean, canSend: Boolean, bloc
             onDismiss = { confirmUnsend = null },
         )
     }
+    reactorsFor?.let { held ->
+        // Live: the sheet follows reactions as they change.
+        val m = vm.messages.firstOrNull { it.id == held.id } ?: held
+        DheuSheet("Reactions", onDismiss = { reactorsFor = null }) {
+            m.reactions.forEach { r ->
+                val own = r.userId == me
+                val person = vm.people[r.userId]
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                        .clickable(enabled = own) { vm.react(m, null); reactorsFor = null }
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Avatar(person?.avatarPath, if (own) myProfile?.fullName ?: "You" else person?.fullName ?: FORMER, 36.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(if (own) "You" else person?.fullName ?: FORMER, fontWeight = FontWeight.SemiBold)
+                        if (own) Text("Tap to remove", color = c.inkMuted, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text(r.emoji, fontSize = 24.sp)
+                }
+            }
+        }
+    }
     lightbox?.let { url ->
         Dialog(onDismissRequest = { lightbox = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.95f)).clickable { lightbox = null }, contentAlignment = Alignment.Center) {
                 AsyncImage(url, null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
             }
+        }
+    }
+    onceView?.let { bytes -> ViewOnceViewer(bytes, onClose = { onceView = null }) }
+}
+
+/** An opened view-once photo: full screen, no screenshots or screen recording, gone for good once closed. */
+@Composable
+private fun ViewOnceViewer(bytes: ByteArray, onClose: () -> Unit) {
+    val image = remember(bytes) { BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() }
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        val window = (LocalView.current.parent as? DialogWindowProvider)?.window
+        DisposableEffect(window) {
+            window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            onDispose { window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
+        }
+        Box(Modifier.fillMaxSize().background(Color.Black).clickable(onClick = onClose), contentAlignment = Alignment.Center) {
+            if (image != null) Image(image, "View-once photo", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
+            else Text("Couldn't show this photo.", color = Color.White)
+            Text(
+                "View once · closes for good",
+                color = Color.White,
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 16.dp)
+                    .clip(CircleShape).background(Color.White.copy(alpha = 0.15f)).padding(horizontal = 12.dp, vertical = 6.dp),
+            )
+        }
+    }
+}
+
+/** Three dots in a bubble while someone types; in a group, with their picture and name. */
+@Composable
+private fun TypingBubble(people: List<Person?>, isGroup: Boolean) {
+    val c = Dheu.colors
+    val pulse = rememberInfiniteTransition(label = "typing")
+    val phase by pulse.animateFloat(0f, 3f, infiniteRepeatable(tween(900, easing = LinearEasing)), label = "dots")
+    Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.Bottom) {
+        if (isGroup) {
+            Box(Modifier.width(36.dp)) { people.firstOrNull()?.let { Avatar(it.avatarPath, it.fullName, 28.dp) } }
+        }
+        Row(
+            Modifier.clip(RoundedCornerShape(20.dp)).background(c.surface2).padding(horizontal = 14.dp, vertical = 13.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            repeat(3) { i ->
+                val lit = phase.toInt() == i
+                Box(Modifier.size(7.dp).clip(CircleShape).background(if (lit) c.inkMuted else c.inkFaint.copy(alpha = 0.6f)))
+            }
+        }
+        if (isGroup) {
+            val names = people.mapNotNull { it?.fullName?.substringBefore(' ') }.joinToString(", ")
+            Text("$names typing…", color = c.inkFaint, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 8.dp, bottom = 4.dp))
         }
     }
 }
@@ -300,15 +418,15 @@ private fun ChatBody(vm: ChatViewModel, isGroup: Boolean, canSend: Boolean, bloc
  * everyone" in a group. Only members who share receipts are in [receipts], and
  * someone added to a group after [m] was sent doesn't count as having seen it.
  */
-private fun receiptLabel(
-    m: Message,
+internal fun receiptLabel(
+    sentAt: String,
     receipts: List<Receipt>,
     isGroup: Boolean,
     others: Int,
     firstName: (String) -> String,
     now: Instant,
 ): String {
-    val sent = parseInstant(m.createdAt)
+    val sent = parseInstant(sentAt)
     val seen = receipts.filter { parseInstant(it.lastReadAt) >= sent && parseInstant(it.joinedAt) <= sent }
     if (seen.isEmpty()) return "Sent"
     if (!isGroup) {
@@ -346,6 +464,7 @@ private fun systemText(m: Message, nameOf: (String) -> String): String {
 private fun Bubble(
     m: Message,
     mine: Boolean,
+    me: String,
     grouped: Boolean,
     endOfRun: Boolean,
     sender: Person?,
@@ -356,7 +475,11 @@ private fun Bubble(
     myUsername: String?,
     nameOf: (String) -> String,
     onLongPress: () -> Unit,
+    onDoubleTap: (() -> Unit)?,
+    onShowReactions: () -> Unit,
     onOpenImage: (String) -> Unit,
+    opening: Boolean,
+    onOpenOnce: () -> Unit,
 ) {
     val c = Dheu.colors
     val nav = LocalNav.current
@@ -403,7 +526,7 @@ private fun Bubble(
                 Text(note, color = c.inkMuted, modifier = Modifier.padding(vertical = 4.dp).clip(RoundedCornerShape(16.dp)).border(1.dp, c.line, RoundedCornerShape(16.dp)).padding(horizontal = 12.dp, vertical = 6.dp))
             }
             Column(
-                Modifier.clip(shape).background(bg).combinedClickable(onClick = {}, onLongClick = onLongPress),
+                Modifier.clip(shape).background(bg).combinedClickable(onClick = {}, onLongClick = onLongPress, onDoubleClick = onDoubleTap),
             ) {
                 m.replyPreview?.let { r ->
                     Column(
@@ -419,10 +542,13 @@ private fun Bubble(
                         image,
                         "Photo",
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.heightIn(max = 320.dp).fillMaxWidth().combinedClickable(onClick = { onOpenImage(image) }, onLongClick = onLongPress),
+                        modifier = Modifier.heightIn(max = 320.dp).fillMaxWidth()
+                            .combinedClickable(onClick = { onOpenImage(image) }, onLongClick = onLongPress, onDoubleClick = onDoubleTap),
                     )
                 }
-                if (m.imagePath == null && m.imageExpiresAt != null) Expired("Photo expired", fg)
+                // A view-once photo has no imagePath; it has its own states.
+                if (m.viewOnce) ViewOnceRow(m, mine, me, isGroup, fg, opening, onOpenOnce)
+                else if (m.imagePath == null && m.imageExpiresAt != null) Expired("Photo expired", fg)
                 if (audio != null) VoiceNote(audio, m.audioDurationMs, tint = fg, track = fg.copy(alpha = 0.3f))
                 if (m.audioPath == null && m.audioExpiresAt != null) Expired("Voice message expired", fg)
                 if (m.body.isNotEmpty()) {
@@ -444,7 +570,59 @@ private fun Bubble(
                     )
                 }
             }
+            // Reactions, tucked under the bubble's edge as on Instagram.
+            if (m.reactions.isNotEmpty()) {
+                val counts = m.reactions.groupingBy { it.emoji }.eachCount().entries.sortedByDescending { it.value }
+                Row(
+                    Modifier.padding(horizontal = 8.dp).offset(y = (-6).dp)
+                        .clip(CircleShape).background(c.surface).padding(2.dp)
+                        .clip(CircleShape).background(c.surface2).clickable(onClick = onShowReactions)
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    counts.take(3).forEach { Text(it.key, fontSize = 13.sp) }
+                    if (m.reactions.size > 1) {
+                        Text("${m.reactions.size}", color = c.inkMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 3.dp))
+                    }
+                }
+            }
         }
+    }
+}
+
+/**
+ * A view-once photo inside its bubble. The sender sees whether it was opened;
+ * a recipient taps once to view it, and then it's "Opened" for good.
+ */
+@Composable
+private fun ViewOnceRow(m: Message, mine: Boolean, me: String, isGroup: Boolean, color: Color, opening: Boolean, onOpen: () -> Unit) {
+    val openedByMe = m.opens.any { it.userId == me }
+    val tappable = !mine && !openedByMe && m.oncePath != null
+    val (icon, label) = when {
+        mine -> (if (m.opens.isEmpty()) Lucide.Eye else Lucide.EyeOff) to when {
+            m.opens.isEmpty() -> "View-once photo"
+            isGroup -> "Opened by ${m.opens.size}"
+            else -> "Opened"
+        }
+        openedByMe -> Lucide.EyeOff to "Opened"
+        m.oncePath != null -> Lucide.Eye to "Tap to view photo"
+        else -> Lucide.Clock to "Photo expired"
+    }
+    val tint = if (tappable || mine) color else color.copy(alpha = 0.7f)
+    Row(
+        Modifier.then(if (tappable) Modifier.clickable(enabled = !opening, onClick = onOpen) else Modifier)
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (opening) CircularProgressIndicator(Modifier.size(16.dp), color = color, strokeWidth = 2.dp)
+        else Icon(icon, null, tint = tint, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(
+            label,
+            color = tint,
+            fontWeight = if (tappable) FontWeight.SemiBold else FontWeight.Normal,
+            fontStyle = if (!tappable && !mine) FontStyle.Italic else FontStyle.Normal,
+        )
     }
 }
 
@@ -471,6 +649,7 @@ private fun Composer(
     val toast = rememberToast()
     var text by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue("")) }
     var photo by remember { mutableStateOf<Uri?>(null) }
+    var viewOnce by remember { mutableStateOf(false) } // send the attached photo as view-once
     var clip by remember { mutableStateOf<VoiceClip?>(null) }
     val recorder = remember { VoiceRecorder(context.applicationContext) }
     var recording by remember { mutableStateOf(false) }
@@ -533,8 +712,27 @@ private fun Composer(
             Row(Modifier.padding(start = 4.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 AsyncImage(uri, null, contentScale = ContentScale.Crop, modifier = Modifier.size(72.dp).clip(RoundedCornerShape(12.dp)))
                 Spacer(Modifier.width(10.dp))
-                Text("Disappears 7 days after sending.", color = c.inkMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                IconButton(onClick = { photo = null }) { Icon(Lucide.X, "Remove photo", tint = c.inkMuted) }
+                Column(Modifier.weight(1f)) {
+                    // View once: they can open it a single time (0023).
+                    Row(
+                        Modifier.clip(CircleShape)
+                            .then(if (viewOnce) Modifier.background(c.brand) else Modifier.border(1.dp, c.line, CircleShape))
+                            .clickable { viewOnce = !viewOnce }
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Lucide.Eye, null, tint = if (viewOnce) c.brandInk else c.inkMuted, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("View once", color = if (viewOnce) c.brandInk else c.inkMuted, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                    }
+                    Text(
+                        if (viewOnce) "They can open it once. You won't see it again." else "Disappears 7 days after sending.",
+                        color = c.inkMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+                IconButton(onClick = { photo = null; viewOnce = false }) { Icon(Lucide.X, "Remove photo", tint = c.inkMuted) }
             }
         }
         clip?.let { voice ->
@@ -577,7 +775,12 @@ private fun Composer(
                 Box(Modifier.weight(1f).heightIn(min = 40.dp).padding(horizontal = 10.dp, vertical = 9.dp), contentAlignment = Alignment.CenterStart) {
                     BasicTextField(
                         value = text,
-                        onValueChange = { if (it.text.length <= 2000) text = it },
+                        onValueChange = {
+                            if (it.text.length <= 2000) {
+                                text = it
+                                if (it.text.isNotBlank()) vm.announceTyping()
+                            }
+                        },
                         textStyle = MaterialTheme.typography.bodyLarge.copy(color = c.ink),
                         cursorBrush = SolidColor(c.brand),
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
@@ -611,10 +814,11 @@ private fun Composer(
                     val canSend = hasContent && !vm.sending
                     Box(
                         Modifier.size(40.dp).clip(CircleShape).background(c.brand).clickable(enabled = canSend) {
-                            vm.send(context, text.text, photo, replyTo, clip) { ok ->
+                            vm.send(context, text.text, photo, replyTo, clip, viewOnce = viewOnce) { ok ->
                                 if (ok) {
                                     text = TextFieldValue("")
                                     photo = null
+                                    viewOnce = false
                                     clip?.file?.delete()
                                     clip = null
                                     onSent()
