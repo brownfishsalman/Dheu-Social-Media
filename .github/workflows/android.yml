@@ -1,0 +1,46 @@
+name: Android
+
+# Only when the app, or this workflow, changes: a website-only push has
+# nothing to rebuild here.
+on:
+  push:
+    branches: [main]
+    paths:
+      - android/**
+      - .github/workflows/android.yml
+  pull_request:
+    paths:
+      - android/**
+      - .github/workflows/android.yml
+
+# A newer push to the same branch makes the older run pointless.
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Android app
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v7
+
+      # The Gradle daemon asks for Java 25 (gradle/gradle-daemon-jvm.properties).
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: gradle
+
+      # local.properties and google-services.json are not committed, so this
+      # build has empty Supabase settings and push switched off. That is enough
+      # to compile and package the app, which is what this job checks.
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --no-daemon
