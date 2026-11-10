@@ -141,7 +141,7 @@ Vercel's functions are pinned to the database's region (`vercel.json`), which on
 
 ## Stack
 
-- Website: Next.js 16 (App Router, Turbopack, server actions, `proxy.ts` for session refresh), React 19 and strict TypeScript. A hand-written `Database` type mirrors the schema, so every query is type-checked.
+- Website: Next.js 16 (App Router, Turbopack, server actions, `proxy.ts` for session refresh), React 19 and strict TypeScript. The `Database` type is generated from the schema, so every query is type-checked.
 - Styling: Tailwind CSS 4 with a small set of tokens, light and dark themes, Inter and Outfit.
 - Android: Kotlin, Jetpack Compose with Material 3, Navigation Compose, supabase-kt over Ktor and OkHttp, Coil for images, kotlinx.serialization, Firebase Cloud Messaging.
 - Supabase: Postgres (with `pg_net` webhooks and Vault), Auth, Storage and Realtime. The schema, policies and triggers are in [`supabase/migrations`](supabase/migrations).
