@@ -16,6 +16,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,12 +34,12 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -53,12 +54,15 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -76,10 +80,13 @@ import com.salmansaadiq.dheu.core.daysLeft
 import com.salmansaadiq.dheu.core.formatDuration
 import com.salmansaadiq.dheu.core.localDate
 import com.salmansaadiq.dheu.core.minutesBetween
+import com.salmansaadiq.dheu.core.parseInstant
+import com.salmansaadiq.dheu.core.timeAgo
 import com.salmansaadiq.dheu.data.Backend
 import com.salmansaadiq.dheu.data.Buckets
 import com.salmansaadiq.dheu.data.Message
 import com.salmansaadiq.dheu.data.Person
+import com.salmansaadiq.dheu.data.Receipt
 import com.salmansaadiq.dheu.data.VOICE_MAX_SECONDS
 import com.salmansaadiq.dheu.data.VoiceClip
 import com.salmansaadiq.dheu.data.replyLabel
@@ -95,13 +102,13 @@ import com.salmansaadiq.dheu.ui.components.Loading
 import com.salmansaadiq.dheu.ui.components.MentionSuggestions
 import com.salmansaadiq.dheu.ui.components.MentionText
 import com.salmansaadiq.dheu.ui.components.SheetAction
-import com.salmansaadiq.dheu.ui.components.fieldColors
 import com.salmansaadiq.dheu.ui.components.rememberToast
 import com.salmansaadiq.dheu.ui.icons.Lucide
 import com.salmansaadiq.dheu.ui.nav.GroupInfoRoute
 import com.salmansaadiq.dheu.ui.nav.LocalNav
 import com.salmansaadiq.dheu.ui.theme.Dheu
 import kotlinx.coroutines.delay
+import java.time.Instant
 
 private const val FORMER = "Former member"
 
@@ -169,8 +176,27 @@ private fun ChatBody(vm: ChatViewModel, isGroup: Boolean, canSend: Boolean, bloc
     LaunchedEffect(vm.messages.lastOrNull()?.id) { if (list.firstVisibleItemIndex <= 2) list.animateScrollToItem(0) }
     LaunchedEffect(vm.error) { vm.error?.let { toast(it); vm.error = null } }
 
+    // "Sent" / "Seen" under my message when it's the newest in the chat, as on Instagram.
+    var now by remember { mutableStateOf(Instant.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            now = Instant.now()
+        }
+    }
+    val receiptFor = vm.messages.lastOrNull { !it.isSystem }?.takeIf { it.senderId == me }
+    val receipt = receiptFor?.let { m ->
+        val others = vm.info?.members.orEmpty().count { it.id != me }
+        receiptLabel(m, vm.receipts, isGroup, others, { id -> vm.people[id]?.fullName?.substringBefore(' ') ?: "Someone" }, now)
+    }
+
     Column(Modifier.fillMaxSize().imePadding()) {
-        LazyColumn(state = list, reverseLayout = true, modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 10.dp)) {
+        LazyColumn(
+            state = list,
+            reverseLayout = true,
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+        ) {
             itemsIndexed(reversed, key = { _, m -> m.id }) { i, m ->
                 val index = vm.messages.lastIndex - i // position in chronological order
                 val prev = vm.messages.getOrNull(index - 1)
@@ -190,6 +216,7 @@ private fun ChatBody(vm: ChatViewModel, isGroup: Boolean, canSend: Boolean, bloc
                             m = m,
                             mine = m.senderId == me,
                             grouped = grouped,
+                            endOfRun = endOfRun,
                             sender = if (isGroup && m.senderId != me) vm.people[m.senderId] else null,
                             senderName = nameOf(m.senderId),
                             showName = isGroup && m.senderId != me && !grouped,
@@ -200,6 +227,15 @@ private fun ChatBody(vm: ChatViewModel, isGroup: Boolean, canSend: Boolean, bloc
                             onLongPress = { actionsFor = m },
                             onOpenImage = { lightbox = it },
                         )
+                        if (receipt != null && m.id == receiptFor.id) {
+                            Text(
+                                receipt,
+                                color = c.inkFaint,
+                                style = MaterialTheme.typography.labelSmall,
+                                textAlign = TextAlign.End,
+                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp, end = 4.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -213,7 +249,6 @@ private fun ChatBody(vm: ChatViewModel, isGroup: Boolean, canSend: Boolean, bloc
             }
         }
 
-        HorizontalDivider(color = c.line)
         if (!canSend) {
             Text(
                 if (blockedByMe) "You blocked this member. Unblock them in Settings to message again." else "You can't message this member.",
@@ -260,6 +295,38 @@ private fun ChatBody(vm: ChatViewModel, isGroup: Boolean, canSend: Boolean, bloc
     }
 }
 
+/**
+ * "Sent", "Seen 5m ago" in a 1-to-1 chat, "Seen by Rafi and Tania" or "Seen by
+ * everyone" in a group. Only members who share receipts are in [receipts], and
+ * someone added to a group after [m] was sent doesn't count as having seen it.
+ */
+private fun receiptLabel(
+    m: Message,
+    receipts: List<Receipt>,
+    isGroup: Boolean,
+    others: Int,
+    firstName: (String) -> String,
+    now: Instant,
+): String {
+    val sent = parseInstant(m.createdAt)
+    val seen = receipts.filter { parseInstant(it.lastReadAt) >= sent && parseInstant(it.joinedAt) <= sent }
+    if (seen.isEmpty()) return "Sent"
+    if (!isGroup) {
+        val ago = timeAgo(seen.first().lastReadAt, now)
+        return if (ago == "now") "Seen just now" else "Seen $ago ago"
+    }
+    if (others > 0 && seen.size >= others) return "Seen by everyone"
+    val names = seen.map { firstName(it.userId) }
+    return when (names.size) {
+        1 -> "Seen by ${names[0]}"
+        2 -> "Seen by ${names[0]} and ${names[1]}"
+        else -> {
+            val rest = names.size - 2
+            "Seen by ${names[0]}, ${names[1]} and $rest other${if (rest == 1) "" else "s"}"
+        }
+    }
+}
+
 /** "You added Rafi, Tania": rendered from the event so the viewer's own name becomes "You". */
 private fun systemText(m: Message, nameOf: (String) -> String): String {
     val e = m.event ?: return m.body
@@ -280,6 +347,7 @@ private fun Bubble(
     m: Message,
     mine: Boolean,
     grouped: Boolean,
+    endOfRun: Boolean,
     sender: Person?,
     senderName: String,
     showName: Boolean,
@@ -294,13 +362,21 @@ private fun Bubble(
     val nav = LocalNav.current
     val bg = if (mine) c.brand else c.surface2
     val fg = if (mine) c.brandInk else c.ink
-    val shape = RoundedCornerShape(18.dp, 18.dp, if (mine) 6.dp else 18.dp, if (mine) 18.dp else 6.dp)
+    // A run of messages reads as one block, as on Instagram: the corners where
+    // two bubbles meet go tight, every other corner stays round.
+    val round = 20.dp
+    val tight = 5.dp
+    val shape = if (mine) {
+        RoundedCornerShape(topStart = round, topEnd = if (grouped) tight else round, bottomEnd = if (endOfRun) round else tight, bottomStart = round)
+    } else {
+        RoundedCornerShape(topStart = if (grouped) tight else round, topEnd = round, bottomEnd = round, bottomStart = if (endOfRun) round else tight)
+    }
     val image = Backend.publicUrl(Buckets.CHAT, m.imagePath)
     val audio = Backend.publicUrl(Buckets.CHAT, m.audioPath)
     val mediaExpiresAt = if (image != null) m.imageExpiresAt else if (audio != null) m.audioExpiresAt else null
 
     Row(
-        Modifier.fillMaxWidth().padding(top = if (grouped) 2.dp else 8.dp),
+        Modifier.fillMaxWidth().padding(top = if (grouped) 2.dp else 10.dp),
         horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
         verticalAlignment = Alignment.Bottom,
     ) {
@@ -436,80 +512,105 @@ private fun Composer(
         }
     }
 
-    Column(Modifier.fillMaxWidth().navigationBarsPadding()) {
+    // One rounded pill above the keyboard, as on Instagram: the photo button on
+    // the left, the text in the middle, the mic (or send) on the right. 8dp of
+    // air below it, above the keyboard or the navigation bar.
+    Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 8.dp)) {
         if (mentionable != null) MentionSuggestions(text, onPick = { text = it }, people = mentionable)
         replyTo?.let { r ->
-            Row(Modifier.fillMaxWidth().background(c.surface2.copy(alpha = 0.6f)).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Lucide.Reply, null, tint = c.brand, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(8.dp))
+            Row(Modifier.fillMaxWidth().padding(start = 8.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.width(3.dp).height(32.dp).clip(RoundedCornerShape(2.dp)).background(c.brand))
+                Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(nameOf(r.senderId), color = c.brand, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                    val who = nameOf(r.senderId)
+                    Text(if (who == "You") "Replying to yourself" else "Replying to $who", color = c.ink, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                     Text(replyLabel(r.toReplyPreview()), color = c.inkMuted, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
                 }
-                IconButton(onClick = onCancelReply) { Icon(Lucide.X, "Cancel reply", tint = c.inkMuted, modifier = Modifier.size(18.dp)) }
+                IconButton(onClick = onCancelReply, modifier = Modifier.size(36.dp)) { Icon(Lucide.X, "Cancel reply", tint = c.inkMuted, modifier = Modifier.size(18.dp)) }
             }
         }
         photo?.let { uri ->
-            Row(Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                AsyncImage(uri, null, contentScale = ContentScale.Crop, modifier = Modifier.size(72.dp).clip(RoundedCornerShape(10.dp)))
+            Row(Modifier.padding(start = 4.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                AsyncImage(uri, null, contentScale = ContentScale.Crop, modifier = Modifier.size(72.dp).clip(RoundedCornerShape(12.dp)))
                 Spacer(Modifier.width(10.dp))
                 Text("Disappears 7 days after sending.", color = c.inkMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
                 IconButton(onClick = { photo = null }) { Icon(Lucide.X, "Remove photo", tint = c.inkMuted) }
             }
         }
         clip?.let { voice ->
-            Row(Modifier.padding(start = 12.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(c.surface2)) {
+            Row(Modifier.padding(start = 4.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(c.surface2)) {
                     VoiceNote(voice.file.absolutePath, voice.durationMs, tint = c.ink, track = c.line)
                 }
                 IconButton(onClick = { voice.file.delete(); clip = null }) { Icon(Lucide.X, "Remove voice message", tint = c.inkMuted) }
             }
-            Text("Disappears 7 days after sending.", color = c.inkMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp))
+            Text("Disappears 7 days after sending.", color = c.inkMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 8.dp, bottom = 8.dp))
         }
+        val pill = Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(24.dp)).background(c.surface2).padding(4.dp)
         if (recording) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { recording = false; recorder.cancel() }) { Icon(Lucide.Trash, "Discard recording", tint = c.inkMuted) }
-                Box(Modifier.size(10.dp).clip(CircleShape).background(c.danger))
-                Spacer(Modifier.width(10.dp))
+            Row(pill, verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { recording = false; recorder.cancel() }, modifier = Modifier.size(40.dp)) {
+                    Icon(Lucide.Trash, "Discard recording", tint = c.inkMuted, modifier = Modifier.size(20.dp))
+                }
+                Box(Modifier.size(8.dp).clip(CircleShape).background(c.danger))
+                Spacer(Modifier.width(8.dp))
                 Text(
                     "${formatDuration(elapsed)} / ${formatDuration(VOICE_MAX_SECONDS * 1000L)}",
                     color = c.ink,
+                    style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.weight(1f),
                 )
                 Box(
-                    Modifier.size(44.dp).clip(CircleShape).background(c.brand).clickable { stopRecording() },
+                    Modifier.size(40.dp).clip(CircleShape).background(c.brand).clickable { stopRecording() },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Lucide.SquareFilled, "Stop recording", tint = c.brandInk, modifier = Modifier.size(16.dp)) }
+                ) { Icon(Lucide.SquareFilled, "Stop recording", tint = c.brandInk, modifier = Modifier.size(14.dp)) }
             }
         } else {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = !vm.sending && clip == null) {
-                    Icon(Lucide.ImagePlus, "Send a photo", tint = c.inkMuted)
+            // Buttons sit at the bottom, so they stay put while a long message grows upwards.
+            Row(pill, verticalAlignment = Alignment.Bottom) {
+                val canPick = !vm.sending && clip == null
+                Box(
+                    Modifier.size(40.dp).alpha(if (canPick) 1f else 0.5f).clip(CircleShape).background(c.brand)
+                        .clickable(enabled = canPick) { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Lucide.ImagePlus, "Send a photo", tint = c.brandInk, modifier = Modifier.size(20.dp)) }
+                Box(Modifier.weight(1f).heightIn(min = 40.dp).padding(horizontal = 10.dp, vertical = 9.dp), contentAlignment = Alignment.CenterStart) {
+                    BasicTextField(
+                        value = text,
+                        onValueChange = { if (it.text.length <= 2000) text = it },
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = c.ink),
+                        cursorBrush = SolidColor(c.brand),
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                        maxLines = 5,
+                        modifier = Modifier.fillMaxWidth(),
+                        decorationBox = { field ->
+                            Box {
+                                if (text.text.isEmpty()) {
+                                    Text(
+                                        if (photo != null || clip != null) "Add a caption…" else "Message…",
+                                        color = c.inkFaint,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                    )
+                                }
+                                field()
+                            }
+                        },
+                    )
                 }
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { if (it.text.length <= 2000) text = it },
-                    placeholder = { Text(if (photo != null || clip != null) "Add a caption…" else "Message…") },
-                    shape = RoundedCornerShape(24.dp),
-                    colors = fieldColors(),
-                    maxLines = 5,
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.width(6.dp))
                 val hasContent = text.text.isNotBlank() || photo != null || clip != null
                 if (!hasContent && !vm.sending) {
                     // Mic until there's something to send, then the send button (as on the website).
                     Box(
-                        Modifier.size(44.dp).clip(CircleShape).background(c.brand).clickable {
+                        Modifier.size(40.dp).clip(CircleShape).clickable {
                             if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startRecording()
                             else micPermission.launch(Manifest.permission.RECORD_AUDIO)
                         },
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Lucide.Mic, "Record a voice message", tint = c.brandInk, modifier = Modifier.size(20.dp)) }
+                    ) { Icon(Lucide.Mic, "Record a voice message", tint = c.ink, modifier = Modifier.size(22.dp)) }
                 } else {
                     val canSend = hasContent && !vm.sending
                     Box(
-                        Modifier.size(44.dp).clip(CircleShape).background(if (canSend) c.brand else c.surface2).clickable(enabled = canSend) {
+                        Modifier.size(40.dp).clip(CircleShape).background(c.brand).clickable(enabled = canSend) {
                             vm.send(context, text.text, photo, replyTo, clip) { ok ->
                                 if (ok) {
                                     text = TextFieldValue("")
@@ -522,8 +623,8 @@ private fun Composer(
                         },
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (vm.sending) CircularProgressIndicator(Modifier.size(20.dp), color = c.brandInk, strokeWidth = 2.dp)
-                        else Icon(Lucide.Send, "Send", tint = if (canSend) c.brandInk else c.inkFaint, modifier = Modifier.size(20.dp))
+                        if (vm.sending) CircularProgressIndicator(Modifier.size(18.dp), color = c.brandInk, strokeWidth = 2.dp)
+                        else Icon(Lucide.Send, "Send", tint = c.brandInk, modifier = Modifier.size(18.dp))
                     }
                 }
             }

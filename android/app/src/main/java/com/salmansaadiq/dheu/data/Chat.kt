@@ -9,11 +9,16 @@ import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import io.github.jan.supabase.realtime.realtime
 import io.ktor.http.ContentType
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
@@ -55,6 +60,18 @@ sealed interface ChatEvent {
     /** The channel joined again after a gap; reload to catch up. */
     data object Rejoined : ChatEvent
 }
+
+/**
+ * read_receipts(): when another member last read the chat, for members who
+ * share their receipts (0022). joinedAt lets a group ignore people added
+ * after a message was sent.
+ */
+@Serializable
+data class Receipt(
+    @SerialName("user_id") val userId: String,
+    @SerialName("last_read_at") val lastReadAt: String,
+    @SerialName("joined_at") val joinedAt: String,
+)
 
 object Chat {
     const val PAGE = 50
@@ -181,6 +198,35 @@ object Chat {
 
     suspend fun markRead(conversationId: String) {
         Backend.db.rpc("mark_conversation_read", buildJsonObject { put("p_conversation_id", conversationId) })
+    }
+
+    /** Who else has read this chat, and when (only members who share receipts). */
+    suspend fun receipts(conversationId: String): List<Receipt> =
+        Backend.db.rpc("read_receipts", buildJsonObject { put("p_conversation_id", conversationId) }).decodeList()
+
+    private val nudgeScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val nudges = mutableMapOf<String, SharedFlow<Unit>>()
+
+    /**
+     * Fires when someone reads this chat (0022 broadcasts an empty "read" on
+     * "reads:<id>"), and when the channel rejoins after a gap. The topic is
+     * fixed, so one channel per chat is shared by every screen showing it and
+     * kept for a moment after the last one leaves, rather than opened twice.
+     */
+    fun readNudges(conversationId: String): Flow<Unit> = synchronized(nudges) {
+        nudges.getOrPut(conversationId) {
+            channelFlow {
+                val channel = client.channel("reads:$conversationId")
+                launch { channel.broadcastFlow("read").collect { send(Unit) } }
+                launch { rejoins(channel).collect { send(Unit) } }
+                channel.subscribe()
+                try {
+                    awaitCancellation()
+                } finally {
+                    withContext(NonCancellable) { client.realtime.removeChannel(channel) }
+                }
+            }.shareIn(nudgeScope, SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000))
+        }
     }
 
     /** "Delete chat": for me only; the others keep theirs (delete_chat_for_me). */

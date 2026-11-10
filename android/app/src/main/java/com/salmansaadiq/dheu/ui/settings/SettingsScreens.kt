@@ -135,6 +135,10 @@ fun SettingsScreen() {
                 }
             }
 
+            Card("Read receipts", "Whether people see \"Seen\" when you've read their messages.") {
+                ReadReceiptsSetting(profile.id, profile.readReceipts, onSaved = app::refreshMe)
+            }
+
             Card("Notifications", "Messages, mentions, comments, likes and follow requests on this phone.") {
                 NotificationsSetting()
             }
@@ -429,6 +433,49 @@ fun BlockedScreen() {
                     }
                 }
         }
+    }
+}
+
+/**
+ * On / off for showing others when I've read their messages. It applies to my
+ * account everywhere (profiles.read_receipts, 0022); I keep seeing theirs.
+ */
+@Composable
+private fun ReadReceiptsSetting(me: String, saved: Boolean, onSaved: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val toast = rememberToast()
+    val c = Dheu.colors
+    var on by remember(saved) { mutableStateOf(saved) }
+    var saving by remember { mutableStateOf(false) }
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            if (on) "On. People can see when you've read their messages."
+            else "Off. People won't see when you've read their messages. You'll still see when they've read yours.",
+            color = c.inkMuted,
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(12.dp))
+        Switch(
+            checked = on,
+            enabled = !saving,
+            onCheckedChange = { value ->
+                on = value
+                saving = true
+                scope.launch {
+                    try {
+                        Profiles.setReadReceipts(me, value)
+                        onSaved()
+                    } catch (e: Exception) {
+                        on = !value
+                        toast(e.friendly("Couldn't save that."))
+                    } finally {
+                        saving = false
+                    }
+                }
+            },
+            colors = SwitchDefaults.colors(checkedTrackColor = c.brand, checkedThumbColor = c.brandInk),
+        )
     }
 }
 

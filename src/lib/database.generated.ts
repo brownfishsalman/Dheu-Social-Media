@@ -790,6 +790,7 @@ export type Database = {
           is_admin: boolean
           is_private: boolean
           privacy_chosen_at: string | null
+          read_receipts: boolean
           username: string
         }
         Insert: {
@@ -803,6 +804,7 @@ export type Database = {
           is_admin?: boolean
           is_private?: boolean
           privacy_chosen_at?: string | null
+          read_receipts?: boolean
           username: string
         }
         Update: {
@@ -816,6 +818,7 @@ export type Database = {
           is_admin?: boolean
           is_private?: boolean
           privacy_chosen_at?: string | null
+          read_receipts?: boolean
           username?: string
         }
         Relationships: [
@@ -1254,6 +1257,14 @@ export type Database = {
           posts: number
           requested: boolean
           requested_me: boolean
+        }[]
+      }
+      read_receipts: {
+        Args: { p_conversation_id: string }
+        Returns: {
+          joined_at: string
+          last_read_at: string
+          user_id: string
         }[]
       }
       register_push_device: { Args: { p_token: string }; Returns: undefined }

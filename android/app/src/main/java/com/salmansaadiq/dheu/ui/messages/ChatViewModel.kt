@@ -14,6 +14,7 @@ import com.salmansaadiq.dheu.data.ConversationInfo
 import com.salmansaadiq.dheu.data.Images
 import com.salmansaadiq.dheu.data.Message
 import com.salmansaadiq.dheu.data.Person
+import com.salmansaadiq.dheu.data.Receipt
 import com.salmansaadiq.dheu.data.VoiceClip
 import com.salmansaadiq.dheu.data.friendly
 import kotlinx.coroutines.CancellationException
@@ -41,6 +42,9 @@ class ChatViewModel(private val conversationId: String, private val me: String) 
         private set
     var sending by mutableStateOf(false)
         private set
+    /** When the others last read this chat, for "Seen" under my last message. */
+    var receipts by mutableStateOf<List<Receipt>>(emptyList())
+        private set
 
     init {
         load()
@@ -53,6 +57,14 @@ class ChatViewModel(private val conversationId: String, private val me: String) 
                 }
             }
         }
+        viewModelScope.launch {
+            Chat.readNudges(conversationId).catch { }.collect { refreshReceipts() }
+        }
+    }
+
+    /** Quietly keeps the last receipts if this fails (say, before 0022 is applied). */
+    private suspend fun refreshReceipts() {
+        runCatching { Chat.receipts(conversationId) }.onSuccess { receipts = it }
     }
 
     private fun load() {
@@ -72,6 +84,7 @@ class ChatViewModel(private val conversationId: String, private val me: String) 
                 people = conversation.members.associateBy { it.id }
                 learnNames(messages)
                 markRead()
+                refreshReceipts()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -123,6 +136,7 @@ class ChatViewModel(private val conversationId: String, private val me: String) 
         messages = older + latest
         if (complete) hasOlder = false
         if (newFromOthers) markRead()
+        refreshReceipts()
     }
 
     private fun removeLocally(id: String) {

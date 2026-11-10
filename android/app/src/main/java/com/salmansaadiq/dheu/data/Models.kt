@@ -32,6 +32,8 @@ data class Profile(
     @SerialName("is_admin") val isAdmin: Boolean = false,
     @SerialName("is_private") val isPrivate: Boolean = true,
     @SerialName("privacy_chosen_at") val privacyChosenAt: String? = null,
+    /** Whether others see when I've read their messages (0022). */
+    @SerialName("read_receipts") val readReceipts: Boolean = true,
 ) {
     val person get() = Person(id, username, fullName, avatarPath)
 }

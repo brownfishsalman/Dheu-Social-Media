@@ -145,6 +145,11 @@ object Profiles {
         Backend.db.rpc("set_account_privacy", buildJsonObject { put("p_private", private) })
     }
 
+    /** Whether others see "Seen" when I've read their messages (0022). */
+    suspend fun setReadReceipts(me: String, on: Boolean) {
+        client.from("profiles").update({ set("read_receipts", on) }) { filter { eq("id", me) } }
+    }
+
     suspend fun updateDetails(me: String, fullName: String, username: String, bio: String) {
         client.from("profiles").update({
             set("full_name", fullName)
