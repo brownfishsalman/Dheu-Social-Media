@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { publicUrl } from "@/lib/storage";
+import { mediaUrl } from "@/lib/storage";
 import type { FeedImage } from "@/lib/data/posts";
 
 type Props = {
@@ -57,7 +57,7 @@ export function Carousel({ images, alt = "", onDoubleTap, priority }: Props) {
           <div key={img.id} className="flex h-full w-full shrink-0 snap-center items-center justify-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={publicUrl("posts", img.path) ?? ""}
+              src={mediaUrl("posts", img.path) ?? ""}
               alt={alt}
               width={img.width}
               height={img.height}

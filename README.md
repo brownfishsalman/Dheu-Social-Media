@@ -36,8 +36,9 @@
 | **Activity and push** | Follow requests, accepted requests, likes, comments, mentions, new followers and story reactions each raise an alert. Database triggers create them and a live badge counts them. Reactions to your messages and likes on your comments arrive as push notifications only. Installed PWAs receive them as Web Push notifications (on Android, and on iOS 16.4+ from the Home Screen), and the Android app through Firebase Cloud Messaging. |
 | **Discovery** | People search, follower lists, and a "Suggested for you" strip, chosen by the admin, that turns up in the feed now and then. |
 | **Photos** | Resized to 1080 px on the device before upload. HEIC files become JPEGs, EXIF orientation is applied, and GPS and other metadata are stripped. |
-| **Accounts** | Email and password. Sign-up needs an invite code; members create single-use codes for friends and share them from Settings. The first account becomes the admin. Light, dark or system theme, and the website installs as a home-screen app (PWA). |
-| **Admin** | Invite codes with use limits and expiry, suspending members, resetting passwords, deleting accounts, content moderation, curating suggestions, announcements, and an overview of storage use. |
+| **Accounts** | Email and password. Sign-up needs an invite code; members create single-use codes for friends and share them from Settings. The first account becomes the admin. Members can delete their own account, with their password, and everything they shared goes with it. Light, dark or system theme, and the website installs as a home-screen app (PWA). |
+| **Reports** | Any post, story, comment or account can be reported with a reason and a note. Only the admin sees reports, in a queue where they can remove the content, suspend the member, or dismiss it, and they get a push for each new one. |
+| **Admin** | Invite codes with use limits and expiry, suspending members, resetting passwords, deleting accounts, the reports queue, content moderation, curating suggestions, announcements, and an overview of storage use. |
 | **Housekeeping** | A nightly job deletes expired posts, stories, chat photos, opened view-once photos and old notifications along with their files. |
 
 ## Screenshots
@@ -130,6 +131,10 @@ A second trigger on notifications, messages and announcements calls the site's `
 ### Photos are processed on the device
 
 No server touches a photo before it's stored. The website decodes the file in the browser (HEIC through a WebAssembly build of libheif) and the Android app uses the platform's `ImageDecoder`. Both fix the orientation and redraw the photo at up to 1080 × 1920, which also strips all metadata, and cut a 480 px square thumbnail for profile grids. The JPEGs go straight to Storage under `<userId>/<uuid>.jpg`, and Storage policies allow writes only into your own folder.
+
+### Photos load through signed links
+
+Reading works the other way round. The website's `/media/<bucket>/<path>` route and the app's Coil fetcher ask Storage for a short-lived signed link with the member's own session, and Storage policies hand one out only to members allowed to see the row that uses the file: the post, the story (close friends included), the message or the profile. The app caches photos on disk by their path, so a photo seen before needs no new link. The buckets stay public until older app versions are gone; switching them to private then leaves the policies as the only way in (see the owner's guide).
 
 ### Expiry is a timestamp
 

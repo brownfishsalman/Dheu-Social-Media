@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { publicUrl } from "@/lib/storage";
+import { mediaUrl } from "@/lib/storage";
 import { timeAgo } from "@/lib/time";
 
 type StoryOption = { id: string; image_path: string; created_at: string; expires_at: string };
@@ -89,7 +89,7 @@ export function NewHighlightForm({ ownerId, ownerUsername, stories, nextPosition
                   <button type="button" onClick={() => toggle(s.id)} className="block h-full w-full">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={publicUrl("stories", s.image_path) ?? ""}
+                      src={mediaUrl("stories", s.image_path) ?? ""}
                       alt=""
                       loading="lazy"
                       className={`h-full w-full object-cover transition ${on ? "opacity-70" : ""}`}

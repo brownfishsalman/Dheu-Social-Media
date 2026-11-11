@@ -10,6 +10,8 @@ import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.crossfade
 import com.salmansaadiq.dheu.data.LiveConnection
 import com.salmansaadiq.dheu.data.Push
+import com.salmansaadiq.dheu.data.StorageImageFetcher
+import com.salmansaadiq.dheu.data.StorageImageKeyer
 import com.salmansaadiq.dheu.push.Notifications
 
 class DheuApp : Application(), SingletonImageLoader.Factory {
@@ -24,7 +26,12 @@ class DheuApp : Application(), SingletonImageLoader.Factory {
     override fun newImageLoader(context: PlatformContext): ImageLoader =
         ImageLoader.Builder(context)
             // Registered outright rather than found through ServiceLoader, which R8 can strip.
-            .components { add(OkHttpNetworkFetcherFactory()) }
+            .components {
+                add(OkHttpNetworkFetcherFactory())
+                // Storage files load through signed links, cached by path (data/StorageImage.kt).
+                add(StorageImageKeyer())
+                add(StorageImageFetcher.Factory())
+            }
             .crossfade(true)
             .diskCache {
                 DiskCache.Builder()

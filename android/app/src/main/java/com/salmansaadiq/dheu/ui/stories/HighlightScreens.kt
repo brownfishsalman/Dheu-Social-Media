@@ -48,6 +48,8 @@ import com.salmansaadiq.dheu.core.parseInstant
 import com.salmansaadiq.dheu.core.timeAgo
 import com.salmansaadiq.dheu.data.Backend
 import com.salmansaadiq.dheu.data.Buckets
+import com.salmansaadiq.dheu.data.StorageImage
+import com.salmansaadiq.dheu.data.storageImage
 import com.salmansaadiq.dheu.data.HIGHLIGHT_TITLE_MAX
 import com.salmansaadiq.dheu.data.HighlightSummary
 import com.salmansaadiq.dheu.data.StoryRow
@@ -90,7 +92,7 @@ fun HighlightsRow(highlights: List<HighlightSummary>, isOwner: Boolean) {
         items(highlights, key = { it.id }) { h ->
             Bubble(h.title, onClick = { nav.to(HighlightRoute(h.id)) }) {
                 Box(Modifier.fillMaxSize().border(2.dp, c.line, CircleShape).padding(4.dp).clip(CircleShape).background(c.surface2)) {
-                    AsyncImage(Backend.publicUrl(Buckets.STORIES, h.coverPath), null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    AsyncImage(storageImage(Buckets.STORIES, h.coverPath), null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                 }
             }
         }
@@ -166,7 +168,7 @@ fun NewHighlightScreen() {
                                 },
                             ) {
                                 AsyncImage(
-                                    Backend.publicUrl(Buckets.STORIES, story.imagePath),
+                                    StorageImage(Buckets.STORIES, story.imagePath),
                                     null,
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.fillMaxSize().alpha(if (on) 0.7f else 1f),

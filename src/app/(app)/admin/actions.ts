@@ -5,8 +5,48 @@ import { z } from "zod";
 import { requireProfile } from "@/lib/data/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { postImageFiles } from "@/lib/storage";
+import { removeUserFiles } from "@/lib/account";
 
 export type ActionResult = { ok: true; message?: string; secret?: string } | { ok: false; error: string };
+
+type Admin = ReturnType<typeof createAdminClient>;
+
+// ---- the steps several actions share --------------------------------------------
+
+async function banMember(admin: Admin, userId: string, banned: boolean): Promise<ActionResult> {
+  // Blocks login / token refresh at the auth layer ("none" lifts the ban).
+  const { error: authErr } = await admin.auth.admin.updateUserById(userId, {
+    ban_duration: banned ? "876000h" : "none",
+  });
+  if (authErr) return { ok: false, error: authErr.message };
+  const { error } = await admin
+    .from("profiles")
+    .update({ banned_at: banned ? new Date().toISOString() : null })
+    .eq("id", userId);
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+async function removePost(admin: Admin, postId: string): Promise<ActionResult> {
+  const { data: images } = await admin.from("post_images").select("path, thumb_path").eq("post_id", postId);
+  if (images && images.length > 0) {
+    await admin.storage.from("posts").remove(postImageFiles(images));
+  }
+  const { error } = await admin.from("posts").delete().eq("id", postId);
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+async function removeStory(admin: Admin, storyId: string): Promise<ActionResult> {
+  const { data: story } = await admin.from("stories").select("image_path").eq("id", storyId).maybeSingle();
+  if (story) await admin.storage.from("stories").remove([story.image_path]);
+  const { error } = await admin.from("stories").delete().eq("id", storyId);
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+async function removeComment(admin: Admin, commentId: string): Promise<ActionResult> {
+  // Its replies go with it (on delete cascade).
+  const { error } = await admin.from("comments").delete().eq("id", commentId);
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
 
 async function assertAdmin() {
   const me = await requireProfile();
@@ -73,20 +113,8 @@ export async function deleteInvite(id: string): Promise<ActionResult> {
 export async function setBanned(userId: string, banned: boolean): Promise<ActionResult> {
   const me = await assertAdmin();
   if (userId === me.id) return { ok: false, error: "You can't ban yourself." };
-  const admin = createAdminClient();
-
-  // Blocks login / token refresh at the auth layer ("none" lifts the ban).
-  const { error: authErr } = await admin.auth.admin.updateUserById(userId, {
-    ban_duration: banned ? "876000h" : "none",
-  });
-  if (authErr) return { ok: false, error: authErr.message };
-
-  const { error } = await admin
-    .from("profiles")
-    .update({ banned_at: banned ? new Date().toISOString() : null })
-    .eq("id", userId);
-  if (error) return { ok: false, error: error.message };
-
+  const result = await banMember(createAdminClient(), userId, banned);
+  if (!result.ok) return result;
   revalidatePath("/admin/members");
   return { ok: true, message: banned ? "Member suspended." : "Member reinstated." };
 }
@@ -106,17 +134,11 @@ export async function resetPassword(userId: string): Promise<ActionResult> {
 export async function deleteMember(userId: string): Promise<ActionResult> {
   const me = await assertAdmin();
   if (userId === me.id) return { ok: false, error: "You can't delete yourself." };
-  const admin = createAdminClient();
 
   // Remove their files first (rows cascade when the auth user is deleted).
-  for (const bucket of ["avatars", "posts", "stories", "chat"] as const) {
-    const { data: files } = await admin.storage.from(bucket).list(userId, { limit: 1000 });
-    if (files && files.length > 0) {
-      await admin.storage.from(bucket).remove(files.map((f) => `${userId}/${f.name}`));
-    }
-  }
+  await removeUserFiles(userId);
 
-  const { error } = await admin.auth.admin.deleteUser(userId);
+  const { error } = await createAdminClient().auth.admin.deleteUser(userId);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/admin/members");
   return { ok: true, message: "Member deleted." };
@@ -124,26 +146,74 @@ export async function deleteMember(userId: string): Promise<ActionResult> {
 
 export async function adminDeletePost(postId: string): Promise<ActionResult> {
   await assertAdmin();
-  const admin = createAdminClient();
-  const { data: images } = await admin.from("post_images").select("path, thumb_path").eq("post_id", postId);
-  if (images && images.length > 0) {
-    await admin.storage.from("posts").remove(postImageFiles(images));
-  }
-  const { error } = await admin.from("posts").delete().eq("id", postId);
-  if (error) return { ok: false, error: error.message };
+  const result = await removePost(createAdminClient(), postId);
+  if (!result.ok) return result;
   revalidatePath("/admin/content");
   return { ok: true, message: "Post deleted." };
 }
 
 export async function adminDeleteStory(storyId: string): Promise<ActionResult> {
   await assertAdmin();
-  const admin = createAdminClient();
-  const { data: story } = await admin.from("stories").select("image_path").eq("id", storyId).maybeSingle();
-  if (story) await admin.storage.from("stories").remove([story.image_path]);
-  const { error } = await admin.from("stories").delete().eq("id", storyId);
-  if (error) return { ok: false, error: error.message };
+  const result = await removeStory(createAdminClient(), storyId);
+  if (!result.ok) return result;
   revalidatePath("/admin/content");
   return { ok: true, message: "Story deleted." };
+}
+
+// ---- reports (0025) ---------------------------------------------------------------
+
+const reportActionSchema = z.object({
+  reportIds: z.array(z.uuid()).min(1).max(200),
+  action: z.enum(["remove", "suspend", "resolve", "dismiss"]),
+  targetType: z.enum(["post", "story", "comment", "profile"]),
+  targetId: z.uuid().nullable(), // the post, story or comment (null when it's already gone)
+  targetUserId: z.uuid().nullable(),
+});
+
+const REPORT_DONE: Record<z.infer<typeof reportActionSchema>["action"], string> = {
+  remove: "Removed. Its reports are closed.",
+  suspend: "Member suspended. The reports are closed.",
+  resolve: "Marked as handled.",
+  dismiss: "Dismissed.",
+};
+
+// Admin → Reports: act on everything reported about one thing, then close
+// those reports (who closed them and when is kept).
+export async function actOnReports(input: z.input<typeof reportActionSchema>): Promise<ActionResult> {
+  const me = await assertAdmin();
+  const parsed = reportActionSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "That request didn't look right." };
+  const { reportIds, action, targetType, targetId, targetUserId } = parsed.data;
+  const admin = createAdminClient();
+
+  if (action === "remove") {
+    if (!targetId || targetType === "profile") return { ok: false, error: "There's nothing to remove." };
+    const removed =
+      targetType === "post"
+        ? await removePost(admin, targetId)
+        : targetType === "story"
+          ? await removeStory(admin, targetId)
+          : await removeComment(admin, targetId);
+    if (!removed.ok) return removed;
+  } else if (action === "suspend") {
+    if (!targetUserId) return { ok: false, error: "That member's account is gone." };
+    if (targetUserId === me.id) return { ok: false, error: "You can't suspend yourself." };
+    const banned = await banMember(admin, targetUserId, true);
+    if (!banned.ok) return banned;
+  }
+
+  const { error } = await admin
+    .from("reports")
+    .update({ status: action === "dismiss" ? "dismissed" : "resolved", resolved_at: new Date().toISOString(), resolved_by: me.id })
+    .in("id", reportIds)
+    .eq("status", "open");
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/admin/reports");
+  revalidatePath("/admin");
+  if (action === "remove") revalidatePath("/admin/content");
+  if (action === "suspend") revalidatePath("/admin/members");
+  return { ok: true, message: REPORT_DONE[action] };
 }
 
 export async function addSuggestion(userId: string): Promise<ActionResult> {

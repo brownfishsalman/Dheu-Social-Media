@@ -62,16 +62,19 @@ import com.salmansaadiq.dheu.core.expiresIn
 import com.salmansaadiq.dheu.core.timeAgo
 import com.salmansaadiq.dheu.data.Backend
 import com.salmansaadiq.dheu.data.Buckets
+import com.salmansaadiq.dheu.data.StorageImage
 import com.salmansaadiq.dheu.data.Downloads
 import com.salmansaadiq.dheu.data.Post
 import com.salmansaadiq.dheu.data.PostImage
 import com.salmansaadiq.dheu.data.Posts
+import com.salmansaadiq.dheu.data.ReportTarget
 import com.salmansaadiq.dheu.data.friendly
 import com.salmansaadiq.dheu.ui.LocalAppState
 import com.salmansaadiq.dheu.ui.components.Avatar
 import com.salmansaadiq.dheu.ui.components.MentionText
 import com.salmansaadiq.dheu.ui.components.ConfirmDialog
 import com.salmansaadiq.dheu.ui.components.DheuSheet
+import com.salmansaadiq.dheu.ui.components.ReportSheet
 import com.salmansaadiq.dheu.ui.components.SheetAction
 import com.salmansaadiq.dheu.ui.components.rememberToast
 import com.salmansaadiq.dheu.ui.icons.Lucide
@@ -101,6 +104,7 @@ fun PostCard(post: Post, onDeleted: () -> Unit, detail: Boolean = false) {
     var burst by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var reporting by remember { mutableStateOf(false) }
     var expanded by remember { mutableStateOf(detail) }
     var downloading by remember { mutableStateOf(false) }
 
@@ -259,11 +263,15 @@ fun PostCard(post: Post, onDeleted: () -> Unit, detail: Boolean = false) {
                 Spacer(Modifier.width(12.dp))
                 Text(expiresIn(post.expiresAt), color = c.inkMuted)
             }
+            if (post.authorId != me) {
+                SheetAction(Lucide.Flag, "Report post", onClick = { menu = false; reporting = true }, danger = true)
+            }
             if (post.authorId == me || isAdmin) {
                 SheetAction(Lucide.Trash, "Delete post", onClick = { menu = false; confirmDelete = true }, danger = true)
             }
         }
     }
+    if (reporting) ReportSheet(ReportTarget.Post, post.id, onDismiss = { reporting = false })
     if (confirmDelete) {
         ConfirmDialog(
             title = "Delete this post?",
@@ -301,7 +309,7 @@ fun Carousel(images: List<PostImage>, onDoubleTap: () -> Unit) {
     Box(Modifier.fillMaxWidth().aspectRatio(ratio).background(Color.Black)) {
         HorizontalPager(pager, Modifier.fillMaxSize()) { page ->
             AsyncImage(
-                model = Backend.publicUrl(Buckets.POSTS, images[page].path),
+                model = StorageImage(Buckets.POSTS, images[page].path),
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures(onDoubleTap = { onDoubleTap() }) },

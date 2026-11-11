@@ -48,6 +48,7 @@ import com.salmansaadiq.dheu.data.Comment
 import com.salmansaadiq.dheu.data.Post
 import com.salmansaadiq.dheu.data.Posts
 import com.salmansaadiq.dheu.data.Profiles
+import com.salmansaadiq.dheu.data.ReportTarget
 import com.salmansaadiq.dheu.data.UserRef
 import com.salmansaadiq.dheu.data.friendly
 import com.salmansaadiq.dheu.ui.Load
@@ -60,6 +61,7 @@ import com.salmansaadiq.dheu.ui.components.DheuTopBar
 import com.salmansaadiq.dheu.ui.components.ErrorState
 import com.salmansaadiq.dheu.ui.components.Loading
 import com.salmansaadiq.dheu.ui.components.PeopleList
+import com.salmansaadiq.dheu.ui.components.ReportSheet
 import com.salmansaadiq.dheu.ui.components.fieldColors
 import com.salmansaadiq.dheu.ui.components.rememberToast
 import com.salmansaadiq.dheu.ui.icons.Lucide
@@ -119,6 +121,7 @@ private fun PostWithCommentsView(post: Post, initial: List<Comment>, onDeleted: 
     var replyTo by remember { mutableStateOf<ReplyTarget?>(null) }
     var sending by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<Comment?>(null) }
+    var reporting by remember { mutableStateOf<String?>(null) } // a comment id
 
     val tops = comments.filter { it.parentId == null }
     val replies = comments.filter { it.parentId != null }.groupBy { it.parentId }
@@ -161,6 +164,7 @@ private fun PostWithCommentsView(post: Post, initial: List<Comment>, onDeleted: 
             onReply = { startReply(comment) },
             onLike = { toggleLike(comment) },
             onDelete = { deleting = comment },
+            onReport = if (comment.authorId == myId) null else ({ reporting = comment.id }),
         )
     }
 
@@ -222,6 +226,8 @@ private fun PostWithCommentsView(post: Post, initial: List<Comment>, onDeleted: 
         }
     }
 
+    reporting?.let { id -> ReportSheet(ReportTarget.Comment, id, onDismiss = { reporting = null }) }
+
     deleting?.let { target ->
         val replyCount = replies[target.id].orEmpty().size
         ConfirmDialog(
@@ -262,6 +268,7 @@ private fun CommentRow(
     onReply: () -> Unit,
     onLike: () -> Unit,
     onDelete: () -> Unit,
+    onReport: (() -> Unit)?, // someone else's comment
 ) {
     val c = Dheu.colors
     val nav = LocalNav.current
@@ -288,6 +295,14 @@ private fun CommentRow(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable(onClick = onReply).padding(vertical = 6.dp, horizontal = 2.dp),
                 )
+                if (onReport != null) {
+                    Text(
+                        "Report",
+                        color = c.inkFaint,
+                        style = meta,
+                        modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable(onClick = onReport).padding(vertical = 6.dp, horizontal = 2.dp),
+                    )
+                }
                 if (canDelete) {
                     Icon(
                         Lucide.Trash,

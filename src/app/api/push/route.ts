@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendPush, type PushPayload } from "@/lib/push";
-import { avatarUrl } from "@/lib/storage";
+import { adminSignedUrls } from "@/lib/storage-server";
+import { TARGET_NOUNS, reasonLabel, type ReportTargetType } from "@/lib/reports";
 
 // Called by the database (pg_net trigger) whenever a notification, message or
 // announcement row is inserted. Authenticated with a shared secret held in
@@ -32,12 +33,19 @@ type MessageRow = {
 type AnnouncementRow = { id: string; body: string };
 type ReactionRow = { message_id: string; user_id: string; conversation_id: string; emoji: string }; // 0023
 type CommentLikeRow = { comment_id: string; user_id: string }; // 0024
+type ReportRow = { id: string; reporter_id: string | null; target_type: ReportTargetType; reason: string }; // 0025
 
-// Who did it: their username for the text, their photo for the app's notification.
+// A day is plenty: the phone or browser fetches the icon as the notification arrives.
+const ICON_LINK_SECONDS = 24 * 60 * 60;
+
+// Who did it: their username for the text, their photo for the notification.
+// The photo is a signed link, since the notification fetches it without a session.
 async function personOf(id: string): Promise<{ name: string; icon?: string }> {
   const admin = createAdminClient();
   const { data } = await admin.from("profiles").select("username, avatar_path").eq("id", id).maybeSingle();
-  return { name: data?.username ?? "Someone", icon: avatarUrl(data?.avatar_path) ?? undefined };
+  const path = data?.avatar_path;
+  const icon = path ? (await adminSignedUrls("avatars", [path], ICON_LINK_SECONDS)).get(path) : undefined;
+  return { name: data?.username ?? "Someone", icon };
 }
 
 export async function POST(request: Request) {
@@ -172,6 +180,19 @@ export async function POST(request: Request) {
       url: `/p/${c.post_id}`,
       tag: `notif-comment-like-${r.comment_id}`,
       icon,
+    };
+  } else if (table === "reports") {
+    // "New report about a comment: Bullying or harassment", to the admin,
+    // who reviews it in Admin → Reports on the website.
+    const r = record as ReportRow;
+    const { data: admins } = await admin.from("profiles").select("id").eq("is_admin", true);
+    recipients = (admins ?? []).map((a) => a.id).filter((id) => id !== r.reporter_id);
+    const noun = TARGET_NOUNS[r.target_type] ?? "post";
+    payload = {
+      title: "Dheu admin",
+      body: `New report about ${noun === "account" ? "an" : "a"} ${noun}: ${reasonLabel(r.reason)}`,
+      url: "/admin/reports",
+      tag: "admin-reports",
     };
   } else if (table === "announcements") {
     const a = record as AnnouncementRow;

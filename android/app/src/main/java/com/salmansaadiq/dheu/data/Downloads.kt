@@ -24,7 +24,8 @@ object Downloads {
         val day = post.createdAt.take(10)
         var saved = 0
         post.images.sortedBy { it.position }.forEachIndexed { i, image ->
-            val bytes = Backend.storage.from(Buckets.POSTS).downloadPublic(image.path)
+            // With my own session, so it works once the buckets are private too (0025).
+            val bytes = Backend.storage.from(Buckets.POSTS).downloadAuthenticated(image.path)
             write(context, "dheu-$day-${i + 1}-${post.id.take(6)}.jpg", bytes)
             saved++
         }

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
-import { publicUrl } from "@/lib/storage";
+import { mediaUrl } from "@/lib/storage";
 import type { HighlightSummary } from "@/lib/data/stories";
 
 type Props = { highlights: HighlightSummary[]; ownerId: string; isOwner: boolean };
@@ -20,7 +20,7 @@ export function HighlightsRow({ highlights, isOwner }: Props) {
       )}
 
       {highlights.map((h) => {
-        const src = publicUrl("stories", h.cover_path);
+        const src = mediaUrl("stories", h.cover_path);
         return (
           <Link
             key={h.id}

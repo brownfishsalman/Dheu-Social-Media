@@ -76,6 +76,7 @@ import com.salmansaadiq.dheu.ui.LocalAppState
 import com.salmansaadiq.dheu.ui.auth.AccountTypePicker
 import com.salmansaadiq.dheu.ui.components.Avatar
 import com.salmansaadiq.dheu.ui.components.ConfirmDialog
+import com.salmansaadiq.dheu.ui.components.DheuSheet
 import com.salmansaadiq.dheu.ui.components.DheuTextField
 import com.salmansaadiq.dheu.ui.components.DheuTopBar
 import com.salmansaadiq.dheu.ui.components.EmptyState
@@ -188,6 +189,8 @@ fun SettingsScreen() {
                     }, icon = Lucide.ShieldCheck)
                 }
             }
+
+            DeleteAccountCard(isAdmin = profile.isAdmin)
 
             SecondaryButton("Log out", { confirmLogout = true }, Modifier.fillMaxWidth(), icon = Lucide.LogOut, danger = true)
             Text(
@@ -449,6 +452,63 @@ fun BlockedScreen() {
                         })
                     }
                 }
+        }
+    }
+}
+
+/**
+ * Settings → Delete account (0025): says what goes, asks for the password,
+ * then the website deletes it all for good. The admin account can't go.
+ */
+@Composable
+private fun DeleteAccountCard(isAdmin: Boolean) {
+    val c = Dheu.colors
+    val scope = rememberCoroutineScope()
+    val toast = rememberToast()
+    var open by remember { mutableStateOf(false) }
+    var password by remember { mutableStateOf("") }
+    var deleting by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    Card("Delete account", if (isAdmin) "The admin account can't be deleted." else "Removes your account and everything you've shared, for good.") {
+        if (!isAdmin) SecondaryButton("Delete my account", { open = true }, icon = Lucide.Trash, danger = true)
+    }
+    if (open) {
+        DheuSheet("Delete your account?", onDismiss = {
+            if (!deleting) {
+                open = false
+                password = ""
+                error = null
+            }
+        }) {
+            Text(
+                "Your profile, posts, stories, comments, likes and messages are deleted for good, along with your one-to-one chats. This can't be undone.",
+                color = c.inkMuted,
+            )
+            DheuTextField(password, { password = it }, "Your password", password = true, modifier = Modifier.padding(top = 12.dp))
+            error?.let { Text(it, color = c.danger, modifier = Modifier.padding(top = 8.dp)) }
+            SecondaryButton(
+                "Delete my account for good",
+                onClick = {
+                    deleting = true
+                    error = null
+                    scope.launch {
+                        try {
+                            Account.deleteAccount(password)
+                            toast("Your account has been deleted.")
+                        } catch (e: Exception) {
+                            error = e.friendly("Couldn't delete your account. Please try again.")
+                        } finally {
+                            deleting = false
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                enabled = password.isNotEmpty(),
+                loading = deleting,
+                icon = Lucide.Trash,
+                danger = true,
+            )
         }
     }
 }

@@ -7,6 +7,7 @@ export default async function LoginPage(props: PageProps<"/login">) {
   const sp = await props.searchParams;
   const next = typeof sp.next === "string" ? sp.next : undefined;
   const created = sp.created === "1";
+  const deleted = sp.deleted === "1";
 
   return (
     <>
@@ -15,6 +16,11 @@ export default async function LoginPage(props: PageProps<"/login">) {
       {created && (
         <p className="mb-4 rounded-xl bg-brand-soft px-3.5 py-2.5 text-sm text-brand-strong">
           Your account is ready — log in to continue.
+        </p>
+      )}
+      {deleted && (
+        <p className="mb-4 rounded-xl bg-brand-soft px-3.5 py-2.5 text-sm text-brand-strong">
+          Your account has been deleted. Thanks for being part of Dheu.
         </p>
       )}
       <LoginForm next={next} />

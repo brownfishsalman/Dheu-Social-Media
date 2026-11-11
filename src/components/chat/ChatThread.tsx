@@ -8,7 +8,7 @@ import { Sheet } from "@/components/ui/Sheet";
 import { createClient } from "@/lib/supabase/client";
 import { ensureRealtimeAuth } from "@/lib/supabase/realtime";
 import { QUICK_REACTIONS, groupReactions, receiptLabel, type Receipt } from "@/lib/receipts";
-import { publicUrl } from "@/lib/storage";
+import { mediaUrl } from "@/lib/storage";
 import { processImage, POST_MAX, ACCEPT_ATTR, newImagePath, type ProcessedImage } from "@/lib/images";
 import { newAudioPath, baseMime, formatDuration } from "@/lib/audio";
 import { Avatar } from "@/components/ui/Avatar";
@@ -1030,13 +1030,13 @@ function Bubble({
     setDx(0);
   }
 
-  const storySrc = m.story ? publicUrl("stories", m.story.image_path) : null;
-  const imgSrc = m.image_path ? publicUrl("chat", m.image_path) : null;
+  const storySrc = m.story ? mediaUrl("stories", m.story.image_path) : null;
+  const imgSrc = m.image_path ? mediaUrl("chat", m.image_path) : null;
   // A view-once photo has no image_path; it has its own states below.
   const photoExpired = !m.view_once && !m.image_path && m.image_expires_at !== null;
   const openedByMe = m.opens.some((o) => o.user_id === meId);
   const reactionGroups = groupReactions(m.reactions);
-  const audioSrc = m.audio_path ? publicUrl("chat", m.audio_path) : null;
+  const audioSrc = m.audio_path ? mediaUrl("chat", m.audio_path) : null;
   const voiceExpired = !m.audio_path && m.audio_expires_at !== null;
   const mediaExpiresAt = imgSrc ? m.image_expires_at : audioSrc ? m.audio_expires_at : null;
 

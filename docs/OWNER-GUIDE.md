@@ -54,7 +54,9 @@ Useful commands:
    - `supabase/migrations/0022_read_receipts.sql` (read receipts; the apps work without it, minus "Seen")
    - `supabase/migrations/0023_chat_extras.sql` (reactions, typing, view-once photos, "Seen" in the inbox; run before deploying the code that uses it)
    - `supabase/migrations/0024_posts_stories_extras.sql` (close friends stories, saved posts, comment replies and likes; run before deploying the code that uses it)
+   - `supabase/migrations/0025_safety_privacy.sql` (reports, the block check out of the API's reach, photo access rules; run before deploying the code that uses it)
    (0016–0020 must run before deploying the code that uses them.)
+   Never add the `private` schema (made by 0024) to the API's exposed schemas: it holds checks that members must not be able to call.
 2. **Turn off "Confirm email"** – Supabase → Authentication → Sign In / Providers → Email → untick _Confirm email_. (Accounts are created by the app with the invite code, so no confirmation email is needed. The free tier can't send emails to arbitrary addresses anyway.)
 3. **Keys** – Supabase → Project Settings → API keys. Put the URL, the _publishable_ key and the _secret_ key in `.env.local` (copy `.env.example`).
 4. **First account = admin.** The very first person to sign up doesn't need an invite code and automatically becomes the admin. Do this yourself immediately after deploying.
@@ -101,7 +103,18 @@ Everything is under **Settings → Open admin panel** (only visible to the admin
 - **Suggestions** – pick members to appear in the "Suggested for you" strip that shows in feeds now and then; drag order with the arrows.
 - **Announcements** – Messages → *Dheu announcements* (pinned at the top of everyone's inbox). Only you can post there; members get an unread badge and see it instantly. Use it for new features, downtime notices, house rules.
 - **Content** – see all active stories and recent posts; delete anything. You can also delete any post from the "…" menu on the post itself.
-- **Overview** – member count, storage used vs. the free 1 GB, etc.
+- **Reports** – what members reported (a post, story, comment or account), one card per thing with every reason given. Remove it, suspend the member, mark it handled, or dismiss it; closed reports stay listed with who closed them. You get a push for each new report.
+- **Overview** – open reports, member count, storage used vs. the free 1 GB, etc.
+- **Deleted accounts** – members can delete their own account (Settings → Delete account, password needed). It removes their files and everything they posted, like deleting a member here. The admin account can't delete itself.
+
+### Making photos private (once members have updated)
+
+Photos used to be readable by anyone who had a photo's link. Since 0025, the website and the app (from the version after 0.2.0) load every photo through a short-lived signed link, which Storage gives only to members allowed to see that photo. The buckets themselves are still public, because older app versions load photos from the public links. Once everyone has updated the app, switch them off:
+
+1. Supabase → Storage → for each of `avatars`, `posts`, `stories` and `chat`: **Edit bucket** → untick **Public bucket** → Save. (Or in the SQL Editor: `update storage.buckets set public = false where id in ('avatars', 'posts', 'stories', 'chat');`)
+2. Check the website and the app still show photos. Anyone on the old app will see blank photos until they update.
+
+To undo, tick **Public bucket** again (or run the same statement with `public = true`).
 
 ---
 

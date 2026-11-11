@@ -20,6 +20,9 @@ export type NotificationType =
   | "mention"; // caption / comment (post_id, comment_id) or group message (conversation_id, message_id), see 0020
 export type MessageKind = "text" | "system";
 export type StoryAudience = "everyone" | "close_friends"; // 0024
+export type ReportTargetType = "post" | "story" | "comment" | "profile"; // 0025
+export type ReportReason = "spam" | "harassment" | "hate" | "nudity" | "violence" | "self_harm" | "other";
+export type ReportStatus = "open" | "resolved" | "dismissed";
 
 type Simplify<T> = { [K in keyof T]: T[K] } & {};
 
@@ -67,6 +70,11 @@ type Overrides = {
         Row: { audience: StoryAudience };
         Insert: { audience?: StoryAudience };
         Update: { audience?: StoryAudience };
+      };
+      reports: {
+        Row: { target_type: ReportTargetType; reason: ReportReason; status: ReportStatus };
+        Insert: { target_type: ReportTargetType; reason: ReportReason; status?: ReportStatus };
+        Update: { target_type?: ReportTargetType; reason?: ReportReason; status?: ReportStatus };
       };
     };
     Views: {

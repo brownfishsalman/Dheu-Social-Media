@@ -49,6 +49,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.salmansaadiq.dheu.data.Backend
 import com.salmansaadiq.dheu.data.Buckets
+import com.salmansaadiq.dheu.data.StorageImage
 import com.salmansaadiq.dheu.data.FollowState
 import com.salmansaadiq.dheu.data.GridPost
 import com.salmansaadiq.dheu.data.HighlightSummary
@@ -56,6 +57,7 @@ import com.salmansaadiq.dheu.data.Posts
 import com.salmansaadiq.dheu.data.Profile
 import com.salmansaadiq.dheu.data.ProfileStats
 import com.salmansaadiq.dheu.data.Profiles
+import com.salmansaadiq.dheu.data.ReportTarget
 import com.salmansaadiq.dheu.data.Stories
 import com.salmansaadiq.dheu.data.friendly
 import com.salmansaadiq.dheu.ui.Load
@@ -70,6 +72,7 @@ import com.salmansaadiq.dheu.ui.components.FollowButton
 import com.salmansaadiq.dheu.ui.components.IconAction
 import com.salmansaadiq.dheu.ui.components.Loading
 import com.salmansaadiq.dheu.ui.components.PrimaryButton
+import com.salmansaadiq.dheu.ui.components.ReportSheet
 import com.salmansaadiq.dheu.ui.components.SecondaryButton
 import com.salmansaadiq.dheu.ui.components.SheetAction
 import com.salmansaadiq.dheu.ui.components.rememberToast
@@ -304,7 +307,7 @@ private fun GridTile(post: GridPost, onClick: () -> Unit) {
     Box(Modifier.aspectRatio(1f).background(Dheu.colors.surface2).clickable(onClick = onClick)) {
         if (cover != null) {
             AsyncImage(
-                model = Backend.publicUrl(Buckets.POSTS, cover.thumbPath ?: cover.path), // small thumbnail when there is one
+                model = StorageImage(Buckets.POSTS, cover.thumbPath ?: cover.path), // small thumbnail when there is one
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
@@ -361,9 +364,11 @@ private fun ProfileMenu(profile: Profile, stats: ProfileStats, onDismiss: () -> 
             if (stats.followsMe && !stats.blockedByMe) SheetAction(Lucide.UserMinus, "Remove follower", { confirm = "remove" })
             if (stats.blockedByMe) SheetAction(Lucide.ShieldOff, "Unblock", { onDismiss(); run { Profiles.unblock(me, profile.id) } })
             else SheetAction(Lucide.Ban, "Block", { confirm = "block" }, danger = true)
+            SheetAction(Lucide.Flag, "Report ${profile.username}", { confirm = "report" }, danger = true)
         }
     }
     when (confirm) {
+        "report" -> ReportSheet(ReportTarget.Profile, profile.id, onDismiss = { confirm = null; onDismiss() })
         "block" -> ConfirmDialog(
             "Block ${profile.username}?",
             "You won't see each other's posts, stories or messages, and any follows between you are removed.",

@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { X, Pause, Play, Eye, Trash2, Bookmark, Send, Loader2, ChevronLeft, ChevronRight, Star } from "lucide-react";
+import { X, Pause, Play, Eye, Trash2, Bookmark, Send, Loader2, ChevronLeft, ChevronRight, Star, Flag } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { publicUrl } from "@/lib/storage";
+import { mediaUrl } from "@/lib/storage";
 import { timeAgo } from "@/lib/time";
 import { Avatar } from "@/components/ui/Avatar";
 import { SeenBySheet } from "@/components/story/SeenBySheet";
 import { AddToHighlightSheet } from "@/components/story/AddToHighlightSheet";
+import { ReportSheet } from "@/components/report/ReportSheet";
 import type { StoryGroup } from "@/lib/data/stories";
 
 const DURATION = 5000;
@@ -39,7 +40,7 @@ export function StoryViewer(props: ViewerProps) {
   const [progress, setProgress] = useState(0);
   const [paused, setPaused] = useState(false);
   const [holding, setHolding] = useState(false);
-  const [sheet, setSheet] = useState<null | "seen" | "highlight">(null);
+  const [sheet, setSheet] = useState<null | "seen" | "highlight" | "report">(null);
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -126,7 +127,7 @@ export function StoryViewer(props: ViewerProps) {
     const next = stories[index + 1];
     if (next) {
       const img = new Image();
-      img.src = publicUrl("stories", next.image_path) ?? "";
+      img.src = mediaUrl("stories", next.image_path) ?? "";
     }
   }, [index, stories]);
 
@@ -275,7 +276,7 @@ export function StoryViewer(props: ViewerProps) {
     );
   }
 
-  const src = publicUrl("stories", current.image_path) ?? "";
+  const src = mediaUrl("stories", current.image_path) ?? "";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black md:bg-neutral-950">
@@ -347,17 +348,19 @@ export function StoryViewer(props: ViewerProps) {
                 <Star className="size-3 fill-current" /> Close friends
               </span>
             )}
-            <button
-              type="button"
-              onClick={() => setPaused((p) => !p)}
-              aria-label={paused ? "Play" : "Pause"}
-              className="ml-auto p-1.5"
-            >
-              {paused ? <Play className="size-5" /> : <Pause className="size-5" />}
-            </button>
-            <Link href={closeHref} aria-label="Close" className="p-1.5">
-              <X className="size-6" />
-            </Link>
+            <div className="ml-auto flex items-center">
+              {!isOwner && (
+                <button type="button" onClick={() => setSheet("report")} aria-label="Report story" className="p-1.5">
+                  <Flag className="size-5" />
+                </button>
+              )}
+              <button type="button" onClick={() => setPaused((p) => !p)} aria-label={paused ? "Play" : "Pause"} className="p-1.5">
+                {paused ? <Play className="size-5" /> : <Pause className="size-5" />}
+              </button>
+              <Link href={closeHref} aria-label="Close" className="p-1.5">
+                <X className="size-6" />
+              </Link>
+            </div>
           </div>
         </div>
 
@@ -459,6 +462,7 @@ export function StoryViewer(props: ViewerProps) {
         </div>
 
         {sheet === "seen" && <SeenBySheet storyId={current.id} onClose={() => setSheet(null)} />}
+        {sheet === "report" && <ReportSheet target={{ type: "story", id: current.id }} onClose={() => setSheet(null)} />}
         {sheet === "highlight" && (
           <AddToHighlightSheet
             storyId={current.id}

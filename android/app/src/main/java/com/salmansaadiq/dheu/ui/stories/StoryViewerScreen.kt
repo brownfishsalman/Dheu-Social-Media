@@ -53,10 +53,12 @@ import coil3.compose.AsyncImage
 import com.salmansaadiq.dheu.core.timeAgo
 import com.salmansaadiq.dheu.data.Backend
 import com.salmansaadiq.dheu.data.Buckets
+import com.salmansaadiq.dheu.data.StorageImage
 import com.salmansaadiq.dheu.data.HIGHLIGHT_TITLE_MAX
 import com.salmansaadiq.dheu.data.HighlightSummary
 import com.salmansaadiq.dheu.data.Person
 import com.salmansaadiq.dheu.data.Profiles
+import com.salmansaadiq.dheu.data.ReportTarget
 import com.salmansaadiq.dheu.data.Stories
 import com.salmansaadiq.dheu.data.StoryGroup
 import com.salmansaadiq.dheu.data.friendly
@@ -70,6 +72,7 @@ import com.salmansaadiq.dheu.ui.components.ErrorState
 import com.salmansaadiq.dheu.ui.components.Loading
 import com.salmansaadiq.dheu.ui.components.PersonRow
 import com.salmansaadiq.dheu.ui.components.PrimaryButton
+import com.salmansaadiq.dheu.ui.components.ReportSheet
 import com.salmansaadiq.dheu.ui.components.SheetAction
 import com.salmansaadiq.dheu.ui.components.rememberToast
 import com.salmansaadiq.dheu.ui.icons.Lucide
@@ -177,8 +180,9 @@ private fun StoryPlayer(
     var addingToHighlight by remember { mutableStateOf(false) }
     var confirmRemove by remember { mutableStateOf(false) }
     var confirmDeleteHighlight by remember { mutableStateOf(false) }
+    var reporting by remember { mutableStateOf(false) }
     val story = group.stories[index.coerceIn(0, group.stories.lastIndex)]
-    val paused = holding || typing || seenBy != null || confirmDelete || addingToHighlight || confirmRemove || confirmDeleteHighlight
+    val paused = holding || typing || seenBy != null || confirmDelete || addingToHighlight || confirmRemove || confirmDeleteHighlight || reporting
 
     fun next() {
         if (index < group.stories.lastIndex) index++ else onNextGroup()
@@ -215,7 +219,7 @@ private fun StoryPlayer(
         },
     ) {
         AsyncImage(
-            model = Backend.publicUrl(Buckets.STORIES, story.imagePath),
+            model = StorageImage(Buckets.STORIES, story.imagePath),
             contentDescription = null,
             contentScale = ContentScale.Fit,
             modifier = Modifier.fillMaxSize(),
@@ -253,6 +257,7 @@ private fun StoryPlayer(
                         }
                     }
                 }
+                if (!isOwner) IconButton(onClick = { reporting = true }) { Icon(Lucide.Flag, "Report story", tint = Color.White, modifier = Modifier.size(20.dp)) }
                 IconButton(onClick = onClose) { Icon(Lucide.X, "Close", tint = Color.White) }
             }
         }
@@ -320,6 +325,7 @@ private fun StoryPlayer(
         }
     }
 
+    if (reporting) ReportSheet(ReportTarget.Story, story.id, onDismiss = { reporting = false })
     seenBy?.let { viewers ->
         DheuSheet("Seen by ${viewers.size}", onDismiss = { seenBy = null }) {
             if (viewers.isEmpty()) Text("No one yet.")

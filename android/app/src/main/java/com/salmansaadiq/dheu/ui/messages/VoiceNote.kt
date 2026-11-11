@@ -20,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,20 +28,37 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.salmansaadiq.dheu.core.formatDuration
+import com.salmansaadiq.dheu.data.SignedLinks
 import com.salmansaadiq.dheu.ui.icons.Lucide
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private enum class PlayState { Idle, Preparing, Playing, Paused }
 
-/** Play / pause a voice message streamed from Storage (webm/opus or mp4/aac, both decoded by MediaPlayer). */
+/**
+ * A sent voice message, streamed from Storage (webm/opus or mp4/aac, both
+ * decoded by MediaPlayer) through a signed link asked for on the first play,
+ * so the access rules (0025) apply as they do to photos.
+ */
 @Composable
-fun VoiceNote(url: String, durationMs: Long?, tint: Color, track: Color) {
-    var state by remember(url) { mutableStateOf(PlayState.Idle) }
-    var progress by remember(url) { mutableFloatStateOf(0f) }
-    var positionMs by remember(url) { mutableFloatStateOf(0f) }
-    val player = remember(url) { arrayOfNulls<MediaPlayer>(1) }
+fun VoiceNote(bucket: String, path: String, durationMs: Long?, tint: Color, track: Color) =
+    VoicePlayer("$bucket/$path", durationMs, tint, track) { SignedLinks.of(bucket, path) }
 
-    DisposableEffect(url) {
+/** A clip just recorded, played from the phone before it's sent. */
+@Composable
+fun RecordedVoiceNote(filePath: String, durationMs: Long?, tint: Color, track: Color) =
+    VoicePlayer(filePath, durationMs, tint, track) { filePath }
+
+/** Play / pause, with progress; [source] gives what MediaPlayer opens (a link or a file path). */
+@Composable
+private fun VoicePlayer(key: String, durationMs: Long?, tint: Color, track: Color, source: suspend () -> String) {
+    var state by remember(key) { mutableStateOf(PlayState.Idle) }
+    var progress by remember(key) { mutableFloatStateOf(0f) }
+    var positionMs by remember(key) { mutableFloatStateOf(0f) }
+    val player = remember(key) { arrayOfNulls<MediaPlayer>(1) }
+    val scope = rememberCoroutineScope()
+
+    DisposableEffect(key) {
         onDispose {
             player[0]?.release()
             player[0] = null
@@ -56,6 +74,28 @@ fun VoiceNote(url: String, durationMs: Long?, tint: Color, track: Color) {
         }
     }
 
+    fun play(url: String) {
+        player[0] = MediaPlayer().apply {
+            setAudioAttributes(AudioAttributes.Builder().setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
+            setDataSource(url)
+            setOnPreparedListener { it.start(); state = PlayState.Playing }
+            setOnCompletionListener {
+                state = PlayState.Idle
+                progress = 0f
+                positionMs = 0f
+                it.release()
+                player[0] = null
+            }
+            setOnErrorListener { mp, _, _ ->
+                state = PlayState.Idle
+                mp.release()
+                player[0] = null
+                true
+            }
+            prepareAsync()
+        }
+    }
+
     fun toggle() {
         val existing = player[0]
         when (state) {
@@ -64,24 +104,9 @@ fun VoiceNote(url: String, durationMs: Long?, tint: Color, track: Color) {
             PlayState.Preparing -> Unit
             PlayState.Idle -> {
                 state = PlayState.Preparing
-                player[0] = MediaPlayer().apply {
-                    setAudioAttributes(AudioAttributes.Builder().setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
-                    setDataSource(url)
-                    setOnPreparedListener { it.start(); state = PlayState.Playing }
-                    setOnCompletionListener {
-                        state = PlayState.Idle
-                        progress = 0f
-                        positionMs = 0f
-                        it.release()
-                        player[0] = null
-                    }
-                    setOnErrorListener { mp, _, _ ->
-                        state = PlayState.Idle
-                        mp.release()
-                        player[0] = null
-                        true
-                    }
-                    prepareAsync()
+                scope.launch {
+                    val from = runCatching { source() }.getOrNull()
+                    if (from == null) state = PlayState.Idle else runCatching { play(from) }.onFailure { state = PlayState.Idle }
                 }
             }
         }

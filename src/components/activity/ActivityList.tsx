@@ -7,7 +7,7 @@ import { Heart, MessageCircle, UserPlus, Smile, UserCheck, Check, X, Loader2, At
 import { Avatar } from "@/components/ui/Avatar";
 import { MentionText } from "@/components/ui/Mentions";
 import { FollowButton } from "@/components/profile/FollowButton";
-import { publicUrl } from "@/lib/storage";
+import { mediaUrl } from "@/lib/storage";
 import { timeAgo } from "@/lib/time";
 import { markAllNotificationsRead, acceptFollowRequest, declineFollowRequest } from "@/app/(app)/activity/actions";
 import { ACTIVITY_READ_EVENT } from "@/components/nav/BadgeProvider";
@@ -162,7 +162,7 @@ function Row({ n, state, meId }: { n: NotificationItem; state: FollowState; meId
               ? AtSign
               : Smile;
 
-  const thumbSrc = n.thumb ? publicUrl(n.thumbBucket, n.thumb) : null;
+  const thumbSrc = n.thumb ? mediaUrl(n.thumbBucket, n.thumb) : null;
   const social = n.type === "follow" || n.type === "follow_request" || n.type === "follow_accepted";
   const gone = !social && !chat && !n.thumb;
 

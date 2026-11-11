@@ -42,6 +42,8 @@ import com.salmansaadiq.dheu.core.timeAgo
 import com.salmansaadiq.dheu.data.Activity
 import com.salmansaadiq.dheu.data.Backend
 import com.salmansaadiq.dheu.data.Buckets
+import com.salmansaadiq.dheu.data.StorageImage
+import com.salmansaadiq.dheu.data.storageImage
 import com.salmansaadiq.dheu.data.NotificationRow
 import com.salmansaadiq.dheu.data.Profiles
 import com.salmansaadiq.dheu.data.Relationships
@@ -157,8 +159,8 @@ private fun NotificationItem(n: NotificationRow, relationships: Relationships, o
         else -> "reacted to your story."
     }
     val social = n.type in setOf("follow", "follow_request", "follow_accepted")
-    val thumb = if (n.type == "story_reaction") Backend.publicUrl(Buckets.STORIES, n.story?.imagePath)
-    else n.post?.images?.minByOrNull { it.position }?.let { Backend.publicUrl(Buckets.POSTS, it.thumbPath ?: it.path) }
+    val thumb = if (n.type == "story_reaction") storageImage(Buckets.STORIES, n.story?.imagePath)
+    else n.post?.images?.minByOrNull { it.position }?.let { StorageImage(Buckets.POSTS, it.thumbPath ?: it.path) }
 
     Row(
         Modifier.fillMaxWidth().background(if (n.readAt == null) c.brandSoft.copy(alpha = 0.4f) else c.surface).padding(horizontal = 16.dp, vertical = 10.dp),

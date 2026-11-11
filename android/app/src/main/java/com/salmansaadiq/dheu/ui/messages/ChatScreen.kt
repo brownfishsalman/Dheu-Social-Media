@@ -97,6 +97,8 @@ import com.salmansaadiq.dheu.core.parseInstant
 import com.salmansaadiq.dheu.core.timeAgo
 import com.salmansaadiq.dheu.data.Backend
 import com.salmansaadiq.dheu.data.Buckets
+import com.salmansaadiq.dheu.data.StorageImage
+import com.salmansaadiq.dheu.data.storageImage
 import com.salmansaadiq.dheu.data.Message
 import com.salmansaadiq.dheu.data.Person
 import com.salmansaadiq.dheu.data.QUICK_REACTIONS
@@ -182,7 +184,7 @@ private fun ChatBody(vm: ChatViewModel, isGroup: Boolean, canSend: Boolean, bloc
     var reactorsFor by remember { mutableStateOf<Message?>(null) }
     var confirmUnsend by remember { mutableStateOf<Message?>(null) }
     var replyTo by remember { mutableStateOf<Message?>(null) }
-    var lightbox by remember { mutableStateOf<String?>(null) }
+    var lightbox by remember { mutableStateOf<StorageImage?>(null) }
     var onceView by remember { mutableStateOf<ByteArray?>(null) } // an opened view-once photo
 
     fun nameOf(id: String) = if (id == me) "You" else vm.people[id]?.fullName ?: FORMER
@@ -353,10 +355,10 @@ private fun ChatBody(vm: ChatViewModel, isGroup: Boolean, canSend: Boolean, bloc
             }
         }
     }
-    lightbox?.let { url ->
+    lightbox?.let { image ->
         Dialog(onDismissRequest = { lightbox = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.95f)).clickable { lightbox = null }, contentAlignment = Alignment.Center) {
-                AsyncImage(url, null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
+                AsyncImage(image, null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
             }
         }
     }
@@ -477,7 +479,7 @@ private fun Bubble(
     onLongPress: () -> Unit,
     onDoubleTap: (() -> Unit)?,
     onShowReactions: () -> Unit,
-    onOpenImage: (String) -> Unit,
+    onOpenImage: (StorageImage) -> Unit,
     opening: Boolean,
     onOpenOnce: () -> Unit,
 ) {
@@ -494,8 +496,8 @@ private fun Bubble(
     } else {
         RoundedCornerShape(topStart = if (grouped) tight else round, topEnd = round, bottomEnd = round, bottomStart = if (endOfRun) round else tight)
     }
-    val image = Backend.publicUrl(Buckets.CHAT, m.imagePath)
-    val audio = Backend.publicUrl(Buckets.CHAT, m.audioPath)
+    val image = storageImage(Buckets.CHAT, m.imagePath)
+    val audio = m.audioPath
     val mediaExpiresAt = if (image != null) m.imageExpiresAt else if (audio != null) m.audioExpiresAt else null
 
     Row(
@@ -511,7 +513,7 @@ private fun Bubble(
             m.story?.let { story ->
                 Row(Modifier.padding(bottom = 4.dp), verticalAlignment = Alignment.Bottom) {
                     AsyncImage(
-                        Backend.publicUrl(Buckets.STORIES, story.imagePath),
+                        StorageImage(Buckets.STORIES, story.imagePath),
                         null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.width(48.dp).height(80.dp).clip(RoundedCornerShape(8.dp)).background(c.surface2).clickable { nav.story(story.authorId) },
@@ -549,7 +551,7 @@ private fun Bubble(
                 // A view-once photo has no imagePath; it has its own states.
                 if (m.viewOnce) ViewOnceRow(m, mine, me, isGroup, fg, opening, onOpenOnce)
                 else if (m.imagePath == null && m.imageExpiresAt != null) Expired("Photo expired", fg)
-                if (audio != null) VoiceNote(audio, m.audioDurationMs, tint = fg, track = fg.copy(alpha = 0.3f))
+                if (audio != null) VoiceNote(Buckets.CHAT, audio, m.audioDurationMs, tint = fg, track = fg.copy(alpha = 0.3f))
                 if (m.audioPath == null && m.audioExpiresAt != null) Expired("Voice message expired", fg)
                 if (m.body.isNotEmpty()) {
                     MentionText(
@@ -738,7 +740,7 @@ private fun Composer(
         clip?.let { voice ->
             Row(Modifier.padding(start = 4.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(c.surface2)) {
-                    VoiceNote(voice.file.absolutePath, voice.durationMs, tint = c.ink, track = c.line)
+                    RecordedVoiceNote(voice.file.absolutePath, voice.durationMs, tint = c.ink, track = c.line)
                 }
                 IconButton(onClick = { voice.file.delete(); clip = null }) { Icon(Lucide.X, "Remove voice message", tint = c.inkMuted) }
             }

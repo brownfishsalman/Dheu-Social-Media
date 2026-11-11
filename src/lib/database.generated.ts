@@ -1072,6 +1072,111 @@ export type Database = {
           },
         ]
       }
+      reports: {
+        Row: {
+          comment_id: string | null
+          created_at: string
+          details: string
+          id: string
+          post_id: string | null
+          reason: string
+          reporter_id: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+          story_id: string | null
+          target_type: string
+          target_user_id: string | null
+        }
+        Insert: {
+          comment_id?: string | null
+          created_at?: string
+          details?: string
+          id?: string
+          post_id?: string | null
+          reason: string
+          reporter_id?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          story_id?: string | null
+          target_type: string
+          target_user_id?: string | null
+        }
+        Update: {
+          comment_id?: string | null
+          created_at?: string
+          details?: string
+          id?: string
+          post_id?: string | null
+          reason?: string
+          reporter_id?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          story_id?: string | null
+          target_type?: string
+          target_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reports_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "home_feed"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "post_feed"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_reporter_id_fkey"
+            columns: ["reporter_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_target_user_id_fkey"
+            columns: ["target_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       saved_posts: {
         Row: {
           created_at: string

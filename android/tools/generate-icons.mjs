@@ -27,6 +27,7 @@ const ICONS = {
   Square: "square", SquareFilled: "square", AtSign: "at-sign", Bell: "bell", BellOff: "bell-off", Info: "info",
   Pencil: "pencil", MessagesSquare: "messages-square", CirclePlus: "circle-plus",
   Bookmark: "bookmark", BookmarkFilled: "bookmark", Star: "star", StarFilled: "star", Download: "download",
+  Flag: "flag",
 };
 
 const num = (v) => Number(v);

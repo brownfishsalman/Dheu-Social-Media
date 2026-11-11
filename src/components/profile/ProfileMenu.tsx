@@ -2,8 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { MoreHorizontal, Ban, ShieldOff, UserMinus, Loader2 } from "lucide-react";
+import { MoreHorizontal, Ban, ShieldOff, UserMinus, Loader2, Flag } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { ReportSheet } from "@/components/report/ReportSheet";
 
 type Props = {
   targetId: string;
@@ -12,10 +13,11 @@ type Props = {
   followsMe: boolean;
 };
 
-// "…" menu on another member's profile: block / unblock, remove follower.
+// "…" menu on another member's profile: block / unblock, remove follower, report.
 export function ProfileMenu({ targetId, username, blockedByMe, followsMe }: Props) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [reporting, setReporting] = useState(false);
   const [, startTransition] = useTransition();
   const router = useRouter();
 
@@ -87,9 +89,20 @@ export function ProfileMenu({ targetId, username, blockedByMe, followsMe }: Prop
                 <Ban className="size-4" /> Block
               </button>
             )}
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setReporting(true);
+              }}
+              className="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-danger hover:bg-surface-2"
+            >
+              <Flag className="size-4" /> Report {username}
+            </button>
           </div>
         </>
       )}
+      {reporting && <ReportSheet target={{ type: "profile", id: targetId }} onClose={() => setReporting(false)} />}
     </div>
   );
 }

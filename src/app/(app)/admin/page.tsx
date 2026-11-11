@@ -26,7 +26,10 @@ function fmtBytes(n: number) {
 
 export default async function AdminOverviewPage() {
   const admin = createAdminClient();
-  const { data, error } = await admin.rpc("admin_stats");
+  const [{ data, error }, { count: openReports }] = await Promise.all([
+    admin.rpc("admin_stats"),
+    admin.from("reports").select("id", { count: "exact", head: true }).eq("status", "open"),
+  ]);
   if (error || !data) {
     return (
       <div className="rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger">
@@ -39,6 +42,7 @@ export default async function AdminOverviewPage() {
   const pct = Math.min(100, (used / FREE_STORAGE_BYTES) * 100);
 
   const tiles: { label: string; value: number | string; href?: string }[] = [
+    { label: "Open reports", value: openReports ?? 0, href: "/admin/reports" },
     { label: "Members", value: s.members, href: "/admin/members" },
     { label: "Suspended", value: s.banned, href: "/admin/members" },
     { label: "Live posts", value: s.live_posts, href: "/admin/content" },

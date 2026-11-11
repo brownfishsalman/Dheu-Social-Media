@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Layers } from "lucide-react";
-import { publicUrl } from "@/lib/storage";
+import { mediaUrl } from "@/lib/storage";
 import type { GridPost } from "@/lib/data/profiles";
 
 export function PostGrid({ posts }: { posts: GridPost[] }) {
@@ -11,7 +11,7 @@ export function PostGrid({ posts }: { posts: GridPost[] }) {
       {posts.map((post) => {
         const cover = post.images[0];
         // Small square thumbnail; posts from before thumbnails existed use the full image.
-        const src = cover ? publicUrl("posts", cover.thumb_path ?? cover.path) : null;
+        const src = cover ? mediaUrl("posts", cover.thumb_path ?? cover.path) : null;
         return (
           <li key={post.id} className="relative aspect-square overflow-hidden bg-surface-2">
             <Link href={`/p/${post.id}`} className="block h-full w-full">

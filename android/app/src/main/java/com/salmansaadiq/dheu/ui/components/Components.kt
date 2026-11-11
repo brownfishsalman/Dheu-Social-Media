@@ -56,6 +56,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import coil3.compose.AsyncImage
 import com.salmansaadiq.dheu.data.Backend
 import com.salmansaadiq.dheu.data.Buckets
+import com.salmansaadiq.dheu.data.storageImage
 import com.salmansaadiq.dheu.ui.icons.Lucide
 import com.salmansaadiq.dheu.ui.theme.CloseFriendsGreen
 import com.salmansaadiq.dheu.ui.theme.Dheu
@@ -71,10 +72,10 @@ private fun hue(name: String): Float {
 
 @Composable
 fun Avatar(path: String?, name: String, size: Dp, modifier: Modifier = Modifier) {
-    val url = Backend.publicUrl(Buckets.AVATARS, path)
-    if (url != null) {
+    val image = storageImage(Buckets.AVATARS, path)
+    if (image != null) {
         AsyncImage(
-            model = url,
+            model = image,
             contentDescription = name,
             contentScale = ContentScale.Crop,
             modifier = modifier.size(size).clip(CircleShape).background(Dheu.colors.surface2),

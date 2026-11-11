@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Heart, MessageCircle, MoreHorizontal, Link2, Trash2, Clock, Bookmark, Download } from "lucide-react";
+import { Heart, MessageCircle, MoreHorizontal, Link2, Trash2, Clock, Bookmark, Download, Flag } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar } from "@/components/ui/Avatar";
 import { MentionText } from "@/components/ui/Mentions";
 import { Carousel } from "@/components/post/Carousel";
+import { ReportSheet } from "@/components/report/ReportSheet";
 import { timeAgo, expiresIn } from "@/lib/time";
-import { postImageFiles, publicUrl } from "@/lib/storage";
+import { postImageFiles, mediaUrl } from "@/lib/storage";
 import type { FeedPost } from "@/lib/data/posts";
 
 export type Viewer = { id: string; isAdmin: boolean };
@@ -32,6 +33,7 @@ export function PostCard({ post, viewer, detail = false, priority, onDeleted, de
   const [burst, setBurst] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [reporting, setReporting] = useState(false);
   const [expanded, setExpanded] = useState(detail);
   const [, startTransition] = useTransition();
 
@@ -56,7 +58,7 @@ export function PostCard({ post, viewer, detail = false, priority, onDeleted, de
     try {
       const day = post.created_at.slice(0, 10);
       for (const [i, img] of post.images.entries()) {
-        const url = publicUrl("posts", img.path);
+        const url = mediaUrl("posts", img.path);
         if (!url) continue;
         const blob = await (await fetch(url)).blob();
         const a = document.createElement("a");
@@ -155,6 +157,18 @@ export function PostCard({ post, viewer, detail = false, priority, onDeleted, de
                     <Download className="size-4" /> Download {post.images.length === 1 ? "photo" : `${post.images.length} photos`}
                   </button>
                 )}
+                {!isMine && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setReporting(true);
+                    }}
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-danger hover:bg-surface-2"
+                  >
+                    <Flag className="size-4" /> Report post
+                  </button>
+                )}
                 {canDelete && (
                   <button type="button" onClick={deletePost} className="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-danger hover:bg-surface-2">
                     <Trash2 className="size-4" /> Delete post
@@ -165,6 +179,7 @@ export function PostCard({ post, viewer, detail = false, priority, onDeleted, de
           )}
         </div>
       </header>
+      {reporting && <ReportSheet target={{ type: "post", id: post.id }} onClose={() => setReporting(false)} />}
 
       {/* Images */}
       <div className="relative">

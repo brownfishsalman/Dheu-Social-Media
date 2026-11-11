@@ -69,6 +69,25 @@ object Account {
 
     fun inviteLink(code: String) = "${BuildConfig.SITE_URL}/signup?code=$code"
 
+    @Serializable
+    private data class DeleteRequest(val password: String)
+
+    /**
+     * Settings → Delete account (0025). The website checks the password and
+     * deletes the account with its server key (src/lib/account.ts); then the
+     * session here is dropped, which takes the app back to the login screen.
+     */
+    suspend fun deleteAccount(password: String) {
+        val token = Backend.auth.currentAccessTokenOrNull() ?: throw IllegalArgumentException("Not signed in.")
+        val result = postToSite("/api/account/delete", Backend.json.encodeToString(DeleteRequest(password)), bearer = token)
+        if (!result.ok) throw IllegalArgumentException(result.error ?: "Couldn't delete your account. Please try again.")
+        // Their push devices went with the account; this phone just forgets its token.
+        Push.forgetToken()
+        // The server no longer knows the user; signOut still clears the session here.
+        runCatching { Backend.auth.signOut() }
+        if (Backend.auth.currentSessionOrNull() != null) runCatching { Backend.auth.clearSession() }
+    }
+
     private suspend fun postToSite(path: String, body: String, bearer: String?): SiteResult = withContext(Dispatchers.IO) {
         val connection = (URL(BuildConfig.SITE_URL + path).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"

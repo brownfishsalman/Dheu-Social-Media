@@ -14,6 +14,7 @@ import { EditProfileForm } from "@/components/settings/EditProfileForm";
 import { ThemePicker, ChangePasswordForm } from "@/components/settings/AccountSettings";
 import { PrivacySettings } from "@/components/settings/AccountPrivacy";
 import { ReadReceiptsSetting } from "@/components/settings/ReadReceipts";
+import { DeleteAccount } from "@/components/settings/DeleteAccount";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -95,6 +96,18 @@ export default async function SettingsPage() {
             </Link>
           </section>
         )}
+
+        <section className="card p-5">
+          <h2 className="mb-1 font-display text-lg font-semibold">Delete account</h2>
+          {profile.is_admin ? (
+            <p className="text-sm text-ink-muted">The admin account can&apos;t be deleted.</p>
+          ) : (
+            <>
+              <p className="mb-3 text-sm text-ink-muted">Removes your account and everything you&apos;ve shared, for good.</p>
+              <DeleteAccount />
+            </>
+          )}
+        </section>
 
         <form action="/auth/signout" method="post" className="pt-2">
           <button type="submit" className="btn-danger w-full">

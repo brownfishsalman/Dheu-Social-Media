@@ -7,6 +7,7 @@ import { Trash2, Send, Loader2, Heart, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar } from "@/components/ui/Avatar";
 import { MentionText, MentionMenu, useMentions } from "@/components/ui/Mentions";
+import { ReportSheet } from "@/components/report/ReportSheet";
 import { timeAgo } from "@/lib/time";
 import type { CommentItem, PostAuthor } from "@/lib/data/posts";
 import type { Viewer } from "@/components/post/PostCard";
@@ -27,6 +28,7 @@ export function Comments({ postId, postAuthorId, initialComments, viewer }: Prop
   const [replyTo, setReplyTo] = useState<{ id: string; username: string } | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reporting, setReporting] = useState<string | null>(null); // a comment id
   const inputRef = useRef<HTMLInputElement>(null);
   const mentions = useMentions({ value: body, onChange: setBody, inputRef });
 
@@ -103,6 +105,7 @@ export function Comments({ postId, postAuthorId, initialComments, viewer }: Prop
     onReply: () => startReply(c),
     onDelete: () => remove(c),
     onLike: () => toggleLike(c),
+    onReport: c.author_id === viewer.id ? undefined : () => setReporting(c.id),
   });
 
   return (
@@ -157,6 +160,7 @@ export function Comments({ postId, postAuthorId, initialComments, viewer }: Prop
         </button>
       </form>
       {error && <p className="px-4 pb-2 text-xs text-danger">{error}</p>}
+      {reporting && <ReportSheet target={{ type: "comment", id: reporting }} onClose={() => setReporting(null)} />}
     </div>
   );
 }
@@ -170,6 +174,7 @@ function CommentRow({
   onReply,
   onDelete,
   onLike,
+  onReport,
 }: {
   c: CommentItem;
   reply: boolean;
@@ -178,6 +183,7 @@ function CommentRow({
   onReply: () => void;
   onDelete: () => void;
   onLike: () => void;
+  onReport?: () => void; // someone else's comment
 }) {
   const liked = c.likes.some((l) => l.user_id === meId);
   return (
@@ -198,6 +204,15 @@ function CommentRow({
           <button type="button" onClick={onReply} className="font-semibold hover:text-ink">
             Reply
           </button>
+          {onReport && (
+            <button
+              type="button"
+              onClick={onReport}
+              className="opacity-0 transition hover:text-danger group-hover:opacity-100 focus:opacity-100 max-md:opacity-100"
+            >
+              Report
+            </button>
+          )}
           {canDelete && (
             <button
               type="button"

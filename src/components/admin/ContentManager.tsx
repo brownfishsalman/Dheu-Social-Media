@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { Trash2, Loader2 } from "lucide-react";
-import { publicUrl } from "@/lib/storage";
+import { Trash2, Loader2, Star } from "lucide-react";
 import { timeAgo } from "@/lib/time";
 import { adminDeletePost, adminDeleteStory, type ActionResult } from "@/app/(app)/admin/actions";
 
+// cover / image: links signed with the server key (see src/lib/storage-server.ts).
 export type AdminPost = { id: string; caption: string; created_at: string; username: string; cover: string | null };
-export type AdminStory = { id: string; created_at: string; username: string; author_id: string; image_path: string };
+export type AdminStory = { id: string; created_at: string; username: string; author_id: string; image: string | null; closeFriends: boolean };
 
 export function ContentManager({ posts, stories }: { posts: AdminPost[]; stories: AdminStory[] }) {
   const [busy, setBusy] = useState<string | null>(null);
@@ -37,8 +37,13 @@ export function ContentManager({ posts, stories }: { posts: AdminPost[]; stories
               <li key={s.id} className="relative aspect-[9/16] overflow-hidden rounded-lg bg-surface-2">
                 <Link href={`/stories/${s.author_id}`}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={publicUrl("stories", s.image_path) ?? ""} alt="" className="h-full w-full object-cover" loading="lazy" />
+                  {s.image && <img src={s.image} alt="" className="h-full w-full object-cover" loading="lazy" />}
                 </Link>
+                {s.closeFriends && (
+                  <span className="bg-close absolute top-1 left-1 rounded-full p-1 text-white" title="Close friends">
+                    <Star className="size-3 fill-current" />
+                  </span>
+                )}
                 <span className="absolute bottom-1 left-1 max-w-[90%] truncate rounded-full bg-black/60 px-1.5 py-0.5 text-[10px] text-white">
                   {s.username} · {timeAgo(s.created_at)}
                 </span>
@@ -71,7 +76,7 @@ export function ContentManager({ posts, stories }: { posts: AdminPost[]; stories
                 <Link href={`/p/${p.id}`} className="block size-14 shrink-0 overflow-hidden rounded-lg bg-surface-2">
                   {p.cover && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={publicUrl("posts", p.cover) ?? ""} alt="" className="h-full w-full object-cover" loading="lazy" />
+                    <img src={p.cover} alt="" className="h-full w-full object-cover" loading="lazy" />
                   )}
                 </Link>
                 <div className="min-w-0 flex-1">

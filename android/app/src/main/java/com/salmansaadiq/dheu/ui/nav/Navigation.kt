@@ -1,7 +1,10 @@
 package com.salmansaadiq.dheu.ui.nav
 
 import android.Manifest
+import android.content.Intent
 import android.os.Build
+import androidx.core.net.toUri
+import com.salmansaadiq.dheu.BuildConfig
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContentTransitionScope
@@ -334,9 +337,16 @@ private fun MainNav() {
     val link by DeepLinks.pending.collectAsStateWithLifecycle()
     // (Waits for the first screen: on a cold start the NavHost isn't set up yet.)
     val ready = entry != null
+    val context = LocalContext.current
     LaunchedEffect(link, ready) {
         if (link == null || !ready) return@LaunchedEffect
-        DeepLinks.consume()?.let(::routeFor)?.let(nav::to)
+        val url = DeepLinks.consume() ?: return@LaunchedEffect
+        // The admin's report pushes point at the website's admin pages (0025).
+        if (url.trim('/').startsWith("admin")) {
+            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, (BuildConfig.SITE_URL + url).toUri())) }
+            return@LaunchedEffect
+        }
+        routeFor(url)?.let(nav::to)
     }
 
     CompositionLocalProvider(LocalNav provides nav) {

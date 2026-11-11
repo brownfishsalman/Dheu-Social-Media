@@ -44,10 +44,6 @@ object Backend {
 
     /** Signed-in member's id, or null. */
     val userId: String? get() = auth.currentUserOrNull()?.id
-
-    /** Public files sit at unguessable paths in public buckets (see README). */
-    fun publicUrl(bucket: String, path: String?): String? =
-        path?.let { "${BuildConfig.SUPABASE_URL}/storage/v1/object/public/$bucket/$it" }
 }
 
 object Buckets {
