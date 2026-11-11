@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Grid3x3, Lock, MessageCircle, Settings, ShieldCheck } from "lucide-react";
+import { Bookmark, Grid3x3, Lock, MessageCircle, Settings, ShieldCheck } from "lucide-react";
 import { requireProfile } from "@/lib/data/session";
 import { getProfileByUsername, getProfileStats, getProfilePosts } from "@/lib/data/profiles";
+import { getSavedPosts } from "@/lib/data/posts";
 import { Avatar } from "@/components/ui/Avatar";
 import { FollowButton } from "@/components/profile/FollowButton";
 import { ProfileMenu } from "@/components/profile/ProfileMenu";
@@ -24,12 +25,15 @@ export default async function ProfilePage(props: PageProps<"/u/[username]">) {
   if (!profile) notFound(); // also what someone who blocked you sees
 
   const isMe = me.id === profile.id;
+  // My own profile has a private Saved tab (0024).
+  const showSaved = isMe && (await props.searchParams).tab === "saved";
   // Content is fetched alongside the stats rather than after them: RLS returns
   // posts and highlights only to people allowed to see them (empty otherwise).
-  const [stats, posts, highlights] = await Promise.all([
+  const [stats, posts, highlights, saved] = await Promise.all([
     getProfileStats(profile.id),
     getProfilePosts(profile.id),
     getHighlights(profile.id),
+    showSaved ? getSavedPosts(me.id) : Promise.resolve([]),
   ]);
   const blockedByMe = stats.blockStatus === "by_me" || stats.blockStatus === "both";
 
@@ -146,10 +150,40 @@ export default async function ProfilePage(props: PageProps<"/u/[username]">) {
           <HighlightsRow highlights={highlights} ownerId={profile.id} isOwner={isMe} />
 
           <section className="border-t border-line">
-            <div className="flex items-center justify-center gap-2 py-3 text-xs font-semibold tracking-widest text-ink-muted uppercase">
-              <Grid3x3 className="size-4" /> Posts
-            </div>
-            {posts.length === 0 ? (
+            {isMe ? (
+              <nav className="flex justify-center gap-10 text-xs font-semibold tracking-widest uppercase">
+                <Link
+                  href={`/u/${profile.username}`}
+                  aria-current={showSaved ? undefined : "page"}
+                  className={`-mt-px flex items-center gap-2 border-t py-3 ${showSaved ? "border-transparent text-ink-faint" : "border-ink text-ink"}`}
+                >
+                  <Grid3x3 className="size-4" /> Posts
+                </Link>
+                <Link
+                  href={`/u/${profile.username}?tab=saved`}
+                  aria-current={showSaved ? "page" : undefined}
+                  className={`-mt-px flex items-center gap-2 border-t py-3 ${showSaved ? "border-ink text-ink" : "border-transparent text-ink-faint"}`}
+                >
+                  <Bookmark className="size-4" /> Saved
+                </Link>
+              </nav>
+            ) : (
+              <div className="flex items-center justify-center gap-2 py-3 text-xs font-semibold tracking-widest text-ink-muted uppercase">
+                <Grid3x3 className="size-4" /> Posts
+              </div>
+            )}
+            {showSaved ? (
+              saved.length === 0 ? (
+                <div className="px-4 py-16 text-center">
+                  <p className="font-display text-lg font-semibold">Nothing saved yet</p>
+                  <p className="mx-auto mt-1 max-w-xs text-sm text-ink-muted">
+                    Tap the bookmark under a post to keep it here until it expires. Only you can see what you&apos;ve saved.
+                  </p>
+                </div>
+              ) : (
+                <PostGrid posts={saved} />
+              )
+            ) : posts.length === 0 ? (
               <div className="px-4 py-16 text-center">
                 <p className="font-display text-lg font-semibold">No posts yet</p>
                 <p className="mt-1 text-sm text-ink-muted">

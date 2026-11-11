@@ -31,6 +31,7 @@ type MessageRow = {
 };
 type AnnouncementRow = { id: string; body: string };
 type ReactionRow = { message_id: string; user_id: string; conversation_id: string; emoji: string }; // 0023
+type CommentLikeRow = { comment_id: string; user_id: string }; // 0024
 
 // Who did it: their username for the text, their photo for the app's notification.
 async function personOf(id: string): Promise<{ name: string; icon?: string }> {
@@ -146,6 +147,32 @@ export async function POST(request: Request) {
     payload = conv?.is_group
       ? { title: conv.title ?? "Group", body: `${actor} reacted ${r.emoji} to your message${what}`, url: `/messages/${r.conversation_id}`, tag: `chat-${r.conversation_id}`, icon }
       : { title: actor, body: `Reacted ${r.emoji} to your message${what}`, url: `/messages/${r.conversation_id}`, tag: `chat-${r.conversation_id}`, icon };
+  } else if (table === "comment_likes") {
+    // "Rafi liked your comment: …", to the comment's author only. Push only:
+    // no Activity entry, so app versions that don't know the type never show it.
+    const r = record as CommentLikeRow;
+    const { data: c } = await admin.from("comments").select("author_id, body, post_id, post:posts(author_id)").eq("id", r.comment_id).maybeSingle();
+    if (!c || c.author_id === r.user_id) return NextResponse.json({ ok: true, skipped: "nothing to tell" });
+    const postAuthor = (Array.isArray(c.post) ? c.post[0] : c.post)?.author_id ?? null;
+    const [{ data: blocks }, { data: canSee }] = await Promise.all([
+      admin
+        .from("blocks")
+        .select("blocker_id")
+        .or(`and(blocker_id.eq.${r.user_id},blocked_id.eq.${c.author_id}),and(blocker_id.eq.${c.author_id},blocked_id.eq.${r.user_id})`)
+        .limit(1),
+      // They may no longer see the post (a private account they unfollowed).
+      postAuthor ? admin.rpc("can_user_view_content_of", { p_viewer: c.author_id, p_author: postAuthor }) : Promise.resolve({ data: false }),
+    ]);
+    if ((blocks ?? []).length > 0 || !canSee) return NextResponse.json({ ok: true, skipped: "not for them" });
+    const { name: actor, icon } = await personOf(r.user_id);
+    recipients = [c.author_id];
+    payload = {
+      title: "Dheu",
+      body: `${actor} liked your comment: ${c.body.slice(0, 80)}`,
+      url: `/p/${c.post_id}`,
+      tag: `notif-comment-like-${r.comment_id}`,
+      icon,
+    };
   } else if (table === "announcements") {
     const a = record as AnnouncementRow;
     const [{ data: subs }, { data: devices }] = await Promise.all([

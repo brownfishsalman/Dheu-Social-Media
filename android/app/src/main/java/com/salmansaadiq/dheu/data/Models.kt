@@ -77,12 +77,14 @@ data class Post(
     @SerialName("like_count") val likeCount: Int = 0,
     @SerialName("comment_count") val commentCount: Int = 0,
     @SerialName("liked_by_me") val likedByMe: Boolean = false,
+    /** I bookmarked it (0024). */
+    @SerialName("saved_by_me") val savedByMe: Boolean = false,
     val author: Person? = null,
     val images: List<PostImage> = emptyList(),
 )
 
 const val POST_SELECT =
-    "id, author_id, caption, created_at, expires_at, like_count, comment_count, liked_by_me, " +
+    "id, author_id, caption, created_at, expires_at, like_count, comment_count, liked_by_me, saved_by_me, " +
         "author:profiles!posts_author_id_fkey($PERSON), images:post_images(id, path, thumb_path, width, height, position)"
 
 @Serializable
@@ -99,8 +101,16 @@ data class Comment(
     @SerialName("author_id") val authorId: String,
     val body: String,
     @SerialName("created_at") val createdAt: String,
+    /** A reply hangs off a top comment (one level, 0024). */
+    @SerialName("parent_id") val parentId: String? = null,
+    val likes: List<UserRef> = emptyList(),
     val author: Person? = null,
-)
+) {
+    fun likedBy(userId: String) = likes.any { it.userId == userId }
+}
+
+@Serializable
+data class UserRef(@SerialName("user_id") val userId: String)
 
 // ---- stories -------------------------------------------------------------------
 
@@ -113,12 +123,17 @@ data class StoryRow(
     val height: Int,
     @SerialName("created_at") val createdAt: String,
     @SerialName("expires_at") val expiresAt: String,
+    /** "everyone" or "close_friends" (0024). */
+    val audience: String = AUDIENCE_EVERYONE,
     val author: Person? = null,
     val views: List<ViewerId> = emptyList(),
 )
 
 @Serializable
 data class ViewerId(@SerialName("viewer_id") val viewerId: String)
+
+const val AUDIENCE_EVERYONE = "everyone"
+const val AUDIENCE_CLOSE_FRIENDS = "close_friends"
 
 data class Story(
     val id: String,
@@ -128,9 +143,19 @@ data class Story(
     val height: Int,
     val createdAt: String,
     val seen: Boolean,
-)
+    val audience: String = AUDIENCE_EVERYONE,
+) {
+    val closeFriends get() = audience == AUDIENCE_CLOSE_FRIENDS
+}
 
-data class StoryGroup(val author: Person, val stories: List<Story>, val allSeen: Boolean, val latestAt: String)
+/** [closeFriends]: some story here is for close friends, so the ring is green. */
+data class StoryGroup(
+    val author: Person,
+    val stories: List<Story>,
+    val allSeen: Boolean,
+    val latestAt: String,
+    val closeFriends: Boolean = false,
+)
 
 data class HighlightSummary(val id: String, val title: String, val coverPath: String?, val count: Int)
 

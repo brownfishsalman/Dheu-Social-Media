@@ -258,6 +258,7 @@ private fun StoryBar(groups: List<StoryGroup>, me: Profile) {
             StoryBubble(
                 label = "Your story",
                 seen = mine?.allSeen,
+                closeFriends = mine?.closeFriends == true,
                 onClick = { if (mine != null) nav.story(me.id) else nav.to(CreateRoute(story = true)) },
             ) {
                 Box {
@@ -273,7 +274,7 @@ private fun StoryBar(groups: List<StoryGroup>, me: Profile) {
             }
         }
         items(others, key = { it.author.id }) { g ->
-            StoryBubble(label = g.author.username, seen = g.allSeen, onClick = { nav.story(g.author.id) }) {
+            StoryBubble(label = g.author.username, seen = g.allSeen, closeFriends = g.closeFriends, onClick = { nav.story(g.author.id) }) {
                 Avatar(g.author.avatarPath, g.author.fullName, 58.dp)
             }
         }
@@ -282,12 +283,12 @@ private fun StoryBar(groups: List<StoryGroup>, me: Profile) {
 }
 
 @Composable
-private fun StoryBubble(label: String, seen: Boolean?, onClick: () -> Unit, avatar: @Composable () -> Unit) {
+private fun StoryBubble(label: String, seen: Boolean?, closeFriends: Boolean, onClick: () -> Unit, avatar: @Composable () -> Unit) {
     Column(
         Modifier.width(72.dp).clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        StoryRing(seen) { avatar() }
+        StoryRing(seen, closeFriends = closeFriends) { avatar() }
         Spacer(Modifier.height(4.dp))
         Text(
             label,

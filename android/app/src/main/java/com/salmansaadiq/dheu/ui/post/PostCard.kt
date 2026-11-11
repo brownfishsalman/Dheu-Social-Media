@@ -1,8 +1,12 @@
 package com.salmansaadiq.dheu.ui.post
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -50,6 +54,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.salmansaadiq.dheu.BuildConfig
@@ -57,6 +62,7 @@ import com.salmansaadiq.dheu.core.expiresIn
 import com.salmansaadiq.dheu.core.timeAgo
 import com.salmansaadiq.dheu.data.Backend
 import com.salmansaadiq.dheu.data.Buckets
+import com.salmansaadiq.dheu.data.Downloads
 import com.salmansaadiq.dheu.data.Post
 import com.salmansaadiq.dheu.data.PostImage
 import com.salmansaadiq.dheu.data.Posts
@@ -91,10 +97,12 @@ fun PostCard(post: Post, onDeleted: () -> Unit, detail: Boolean = false) {
 
     var liked by remember(post.id) { mutableStateOf(post.likedByMe) }
     var likes by remember(post.id) { mutableIntStateOf(post.likeCount) }
+    var saved by remember(post.id) { mutableStateOf(post.savedByMe) }
     var burst by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var expanded by remember { mutableStateOf(detail) }
+    var downloading by remember { mutableStateOf(false) }
 
     fun setLiked(next: Boolean) {
         if (next == liked) return
@@ -109,6 +117,44 @@ fun PostCard(post: Post, onDeleted: () -> Unit, detail: Boolean = false) {
                 toast(e.friendly())
             }
         }
+    }
+
+    // Saved posts are private to me (0024), listed under Saved on my profile.
+    fun setSaved(next: Boolean) {
+        if (next == saved) return
+        saved = next
+        scope.launch {
+            try {
+                if (next) Posts.save(post.id, me) else Posts.unsave(post.id, me)
+            } catch (e: Exception) {
+                saved = !next
+                toast(e.friendly())
+            }
+        }
+    }
+
+    // My own post's photos, full size, to the gallery (before the post expires).
+    fun saveToPhone() {
+        if (downloading) return
+        downloading = true
+        scope.launch {
+            try {
+                val n = Downloads.savePost(context, post)
+                toast(if (n == 1) "Photo saved to your gallery" else "$n photos saved to your gallery")
+            } catch (e: Exception) {
+                toast(e.friendly("Couldn't save the photos."))
+            } finally {
+                downloading = false
+            }
+        }
+    }
+    val storagePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) saveToPhone() else toast("Allow storage access to save photos.")
+    }
+    fun download() {
+        val allowed = !Downloads.needsPermission ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+        if (allowed) saveToPhone() else storagePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
     }
 
     Column(Modifier.fillMaxWidth().background(c.surface)) {
@@ -141,7 +187,7 @@ fun PostCard(post: Post, onDeleted: () -> Unit, detail: Boolean = false) {
             }
         }
 
-        Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { setLiked(!liked) }) {
                 Icon(
                     if (liked) Lucide.HeartFilled else Lucide.Heart,
@@ -152,6 +198,15 @@ fun PostCard(post: Post, onDeleted: () -> Unit, detail: Boolean = false) {
             }
             IconButton(onClick = { if (!detail) nav.post(post.id) }) {
                 Icon(Lucide.MessageCircle, "Comments", tint = c.ink, modifier = Modifier.size(26.dp))
+            }
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = { setSaved(!saved) }) {
+                Icon(
+                    if (saved) Lucide.BookmarkFilled else Lucide.Bookmark,
+                    if (saved) "Remove from saved" else "Save",
+                    tint = c.ink,
+                    modifier = Modifier.size(26.dp),
+                )
             }
         }
 
@@ -192,6 +247,13 @@ fun PostCard(post: Post, onDeleted: () -> Unit, detail: Boolean = false) {
                 clipboard.setPrimaryClip(ClipData.newPlainText("Dheu post", "${BuildConfig.SITE_URL}/p/${post.id}"))
                 toast("Link copied")
             })
+            if (post.authorId == me) {
+                SheetAction(
+                    Lucide.Download,
+                    if (downloading) "Saving…" else if (post.images.size == 1) "Save photo to phone" else "Save photos to phone",
+                    onClick = { menu = false; download() },
+                )
+            }
             Row(Modifier.padding(horizontal = 12.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Lucide.Clock, null, tint = c.inkMuted, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(12.dp))

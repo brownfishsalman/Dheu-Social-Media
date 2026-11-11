@@ -7,6 +7,11 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Push notifications (Android 13+ asks once, after signing in). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Saving my own post's photos to the gallery: only Android 9 needs this
+         (10 and newer write through MediaStore without a permission). -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
 
     <!-- Backups off: the signed-in session must not travel to another device.
          allowBackup covers Android 11 and older, dataExtractionRules covers 12+. -->

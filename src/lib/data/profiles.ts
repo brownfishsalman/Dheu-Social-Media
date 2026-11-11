@@ -115,6 +115,21 @@ export async function getProfilePosts(profileId: string): Promise<GridPost[]> {
 
 export type ProfileListItem = Pick<Profile, "id" | "username" | "full_name" | "avatar_path">;
 
+// Settings → Close friends (0024): everyone I follow or who follows me, and
+// which of them are on my list. Only I can read my list.
+export async function getCloseFriendChoices(meId: string): Promise<{ people: ProfileListItem[]; chosen: string[] }> {
+  const supabase = await createClient();
+  const [following, followers, { data: list }] = await Promise.all([
+    getFollowing(meId),
+    getFollowers(meId),
+    supabase.from("close_friends").select("friend_id").eq("owner_id", meId),
+  ]);
+  const byId = new Map<string, ProfileListItem>();
+  for (const p of [...following, ...followers]) if (p.id !== meId) byId.set(p.id, p);
+  const people = [...byId.values()].sort((a, b) => a.full_name.localeCompare(b.full_name));
+  return { people, chosen: (list ?? []).map((r) => r.friend_id) };
+}
+
 export async function getFollowers(profileId: string): Promise<ProfileListItem[]> {
   const supabase = await createClient();
   const { data } = await supabase

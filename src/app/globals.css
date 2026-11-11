@@ -131,6 +131,13 @@ body {
 .ring-story-seen {
   background: var(--line);
 }
+/* Close friends: a green ring and badge, as on Instagram (0024) */
+.ring-close {
+  background: #1fb35a;
+}
+.bg-close {
+  background: #1fb35a;
+}
 
 /* Hide scrollbars on horizontal strips (story bar) */
 .no-scrollbar {

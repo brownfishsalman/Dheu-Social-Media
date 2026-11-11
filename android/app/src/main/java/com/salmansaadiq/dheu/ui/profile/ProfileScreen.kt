@@ -31,15 +31,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.salmansaadiq.dheu.data.Backend
@@ -47,6 +52,7 @@ import com.salmansaadiq.dheu.data.Buckets
 import com.salmansaadiq.dheu.data.FollowState
 import com.salmansaadiq.dheu.data.GridPost
 import com.salmansaadiq.dheu.data.HighlightSummary
+import com.salmansaadiq.dheu.data.Posts
 import com.salmansaadiq.dheu.data.Profile
 import com.salmansaadiq.dheu.data.ProfileStats
 import com.salmansaadiq.dheu.data.Profiles
@@ -58,6 +64,7 @@ import com.salmansaadiq.dheu.ui.components.Avatar
 import com.salmansaadiq.dheu.ui.components.ConfirmDialog
 import com.salmansaadiq.dheu.ui.components.DheuSheet
 import com.salmansaadiq.dheu.ui.components.DheuTopBar
+import com.salmansaadiq.dheu.ui.components.EmptyState
 import com.salmansaadiq.dheu.ui.components.ErrorState
 import com.salmansaadiq.dheu.ui.components.FollowButton
 import com.salmansaadiq.dheu.ui.components.IconAction
@@ -151,6 +158,12 @@ private fun ProfileBody(data: ProfileData, onChanged: () -> Unit) {
         stats.requested -> FollowState.Requested
         else -> FollowState.None
     }
+    // My own profile has a private Saved tab (0024). It loads when opened, and
+    // catches up quietly when I come back to it (I may have unsaved something).
+    var savedTab by rememberSaveable { mutableStateOf(false) }
+    val showSaved = isMe && savedTab
+    val savedLoader = if (showSaved) rememberLoader("saved-${profile.id}") { Posts.saved(profile.id) } else null
+    LaunchedEffect(showSaved) { savedLoader?.let { if (it.state is Load.Ready) it.reload(silent = true) } }
 
     LazyVerticalGrid(GridCells.Fixed(3), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         item(span = { GridItemSpan(maxLineSpan) }) {
@@ -208,9 +221,32 @@ private fun ProfileBody(data: ProfileData, onChanged: () -> Unit) {
         }
         if (canSee) item(span = { GridItemSpan(maxLineSpan) }) { HighlightsRow(data.highlights, isOwner = isMe) }
         item(span = { GridItemSpan(maxLineSpan) }) { HorizontalDivider(color = c.line) }
+        if (isMe) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(40.dp, Alignment.CenterHorizontally)) {
+                    ProfileTab(Lucide.Grid, "Posts", selected = !savedTab, onClick = { savedTab = false })
+                    ProfileTab(Lucide.Bookmark, "Saved", selected = savedTab, onClick = { savedTab = true })
+                }
+            }
+        }
 
         if (!canSee) {
             item(span = { GridItemSpan(maxLineSpan) }) { PrivatePanel(stats, followState) }
+        } else if (showSaved) {
+            when (val s = savedLoader?.state ?: Load.Loading) {
+                Load.Loading -> item(span = { GridItemSpan(maxLineSpan) }) { Loading(Modifier.padding(vertical = 48.dp)) }
+                is Load.Failed -> item(span = { GridItemSpan(maxLineSpan) }) { ErrorState(s.message, onRetry = { savedLoader?.reload() }) }
+                is Load.Ready -> if (s.value.isEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        EmptyState(
+                            "Nothing saved yet",
+                            "Tap the bookmark under a post to keep it here until it expires. Only you can see what you've saved.",
+                        )
+                    }
+                } else {
+                    items(s.value, key = { "saved-${it.id}" }) { post -> GridTile(post) { nav.post(post.id) } }
+                }
+            }
         } else if (data.posts.isEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Column(Modifier.fillMaxWidth().padding(vertical = 48.dp, horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -229,6 +265,24 @@ private fun ProfileBody(data: ProfileData, onChanged: () -> Unit) {
             }
         } else {
             items(data.posts, key = { it.id }) { post -> GridTile(post) { nav.post(post.id) } }
+        }
+    }
+}
+
+/** "Posts" / "Saved" under my own header; the open one is marked with a line, as on the website. */
+@Composable
+private fun ProfileTab(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
+    val c = Dheu.colors
+    val tint = if (selected) c.ink else c.inkFaint
+    Column(
+        Modifier.clickable(onClick = onClick).semantics { this.selected = selected },
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(Modifier.width(72.dp).height(1.5.dp).background(if (selected) c.ink else Color.Transparent))
+        Row(Modifier.padding(horizontal = 8.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, tint = tint, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(label.uppercase(), color = tint, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, letterSpacing = 1.5.sp)
         }
     }
 }

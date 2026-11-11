@@ -26,6 +26,7 @@ const ICONS = {
   Eye: "eye", EyeOff: "eye-off", Alert: "circle-alert", Refresh: "refresh-cw", Share: "share-2", Ticket: "ticket",
   Square: "square", SquareFilled: "square", AtSign: "at-sign", Bell: "bell", BellOff: "bell-off", Info: "info",
   Pencil: "pencil", MessagesSquare: "messages-square", CirclePlus: "circle-plus",
+  Bookmark: "bookmark", BookmarkFilled: "bookmark", Star: "star", StarFilled: "star", Download: "download",
 };
 
 const num = (v) => Number(v);

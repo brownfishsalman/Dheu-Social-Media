@@ -35,7 +35,9 @@ object Posts {
             .decodeSingleOrNull<Post>()?.takeIf { it.author != null }?.sorted()
 
     suspend fun comments(postId: String): List<Comment> =
-        client.from("comments").select(Columns.raw("id, post_id, author_id, body, created_at, author:profiles!comments_author_id_fkey($PERSON)")) {
+        client.from("comments").select(
+            Columns.raw("id, post_id, author_id, body, created_at, parent_id, likes:comment_likes(user_id), author:profiles!comments_author_id_fkey($PERSON)"),
+        ) {
             filter { eq("post_id", postId) }
             order("created_at", Order.ASCENDING)
             limit(500)
@@ -46,16 +48,62 @@ object Posts {
         @SerialName("post_id") val postId: String,
         @SerialName("author_id") val authorId: String,
         val body: String,
+        @SerialName("parent_id") val parentId: String? = null,
     )
 
-    suspend fun addComment(postId: String, me: Person, body: String): Comment =
-        client.from("comments").insert(CommentInsert(postId, me.id, body)) {
-            select(Columns.raw("id, post_id, author_id, body, created_at"))
+    /** [parentId]: the top comment this replies to (one level, 0024). */
+    suspend fun addComment(postId: String, me: Person, body: String, parentId: String? = null): Comment =
+        client.from("comments").insert(CommentInsert(postId, me.id, body, parentId)) {
+            select(Columns.raw("id, post_id, author_id, body, created_at, parent_id"))
         }.decodeSingle<Comment>().copy(author = me)
 
+    /** Its replies go with it (on delete cascade). */
     suspend fun deleteComment(id: String) {
         client.from("comments").delete { filter { eq("id", id) } }
     }
+
+    @Serializable
+    private data class CommentLikeInsert(@SerialName("comment_id") val commentId: String, @SerialName("user_id") val userId: String)
+
+    suspend fun likeComment(commentId: String, me: String) {
+        try {
+            client.from("comment_likes").insert(CommentLikeInsert(commentId, me))
+        } catch (e: Exception) {
+            if (e.pgCode != "23505") throw e // already liked: fine
+        }
+    }
+
+    suspend fun unlikeComment(commentId: String, me: String) {
+        client.from("comment_likes").delete { filter { eq("comment_id", commentId); eq("user_id", me) } }
+    }
+
+    // ---- saved posts (0024): private to me, gone when the post expires ----
+
+    @Serializable
+    private data class SaveInsert(@SerialName("user_id") val userId: String, @SerialName("post_id") val postId: String)
+
+    suspend fun save(postId: String, me: String) {
+        try {
+            client.from("saved_posts").insert(SaveInsert(me, postId))
+        } catch (e: Exception) {
+            if (e.pgCode != "23505") throw e // already saved: fine
+        }
+    }
+
+    suspend fun unsave(postId: String, me: String) {
+        client.from("saved_posts").delete { filter { eq("user_id", me); eq("post_id", postId) } }
+    }
+
+    @Serializable
+    private data class SavedRow(val post: GridPost? = null)
+
+    /** Newest save first; RLS leaves out posts that expired or that I can no longer see. */
+    suspend fun saved(me: String): List<GridPost> =
+        client.from("saved_posts").select(Columns.raw("created_at, post:posts(id, created_at, images:post_images(path, thumb_path, width, height, position))")) {
+            filter { eq("user_id", me) }
+            order("created_at", Order.DESCENDING)
+            limit(200)
+        }.decodeList<SavedRow>().mapNotNull { it.post }.map { p -> p.copy(images = p.images.sortedBy { it.position }) }
 
     suspend fun likers(postId: String): List<Person> =
         client.from("post_likes").select(Columns.raw("profile:profiles!post_likes_user_id_fkey($PERSON)")) {

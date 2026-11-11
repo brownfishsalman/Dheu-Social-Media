@@ -3,6 +3,7 @@ package com.salmansaadiq.dheu.ui.post
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,6 +22,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -30,6 +32,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -41,6 +48,7 @@ import com.salmansaadiq.dheu.data.Comment
 import com.salmansaadiq.dheu.data.Post
 import com.salmansaadiq.dheu.data.Posts
 import com.salmansaadiq.dheu.data.Profiles
+import com.salmansaadiq.dheu.data.UserRef
 import com.salmansaadiq.dheu.data.friendly
 import com.salmansaadiq.dheu.ui.Load
 import com.salmansaadiq.dheu.ui.LocalAppState
@@ -89,66 +97,120 @@ fun PostScreen(id: String) {
     }
 }
 
+/** The top comment a reply hangs off, and whose name the reply starts with. */
+private data class ReplyTarget(val commentId: String, val username: String)
+
+/**
+ * Comments with one level of replies and likes, as on the website (0024).
+ * A reply starts with "@name", so its author hears about it as a mention.
+ */
 @Composable
 private fun PostWithCommentsView(post: Post, initial: List<Comment>, onDeleted: () -> Unit) {
     val app = LocalAppState.current
     val me by app.me.collectAsStateWithLifecycle()
-    val nav = LocalNav.current
+    val myId = app.userId
     val c = Dheu.colors
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
+    val focus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
     var comments by remember(post.id) { mutableStateOf(initial) }
     var draft by remember { mutableStateOf(TextFieldValue("")) }
+    var replyTo by remember { mutableStateOf<ReplyTarget?>(null) }
     var sending by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<Comment?>(null) }
+
+    val tops = comments.filter { it.parentId == null }
+    val replies = comments.filter { it.parentId != null }.groupBy { it.parentId }
+
+    fun startReply(comment: Comment) {
+        val author = comment.author ?: return
+        // Replies hang off the top comment; replying to a reply names its author.
+        replyTo = ReplyTarget(comment.parentId ?: comment.id, author.username)
+        val text = "@${author.username} "
+        draft = TextFieldValue(text, TextRange(text.length))
+        focus.requestFocus()
+        keyboard?.show()
+    }
+
+    fun toggleLike(comment: Comment) {
+        val liked = comment.likedBy(myId)
+        fun flip(on: Boolean) {
+            comments = comments.map { x ->
+                if (x.id != comment.id) x
+                else x.copy(likes = x.likes.filter { it.userId != myId } + if (on) listOf(UserRef(myId)) else emptyList())
+            }
+        }
+        flip(!liked)
+        scope.launch {
+            try {
+                if (liked) Posts.unlikeComment(comment.id, myId) else Posts.likeComment(comment.id, myId)
+            } catch (e: Exception) {
+                flip(liked)
+                toast(e.friendly())
+            }
+        }
+    }
+
+    val commentRow: @Composable (Comment, Boolean) -> Unit = { comment, reply ->
+        CommentRow(
+            comment = comment,
+            reply = reply,
+            liked = comment.likedBy(myId),
+            canDelete = comment.authorId == myId || post.authorId == myId || me?.isAdmin == true,
+            onReply = { startReply(comment) },
+            onLike = { toggleLike(comment) },
+            onDelete = { deleting = comment },
+        )
+    }
 
     Column(Modifier.fillMaxSize().imePadding()) {
         LazyColumn(Modifier.weight(1f)) {
             item(key = "post") { PostCard(post, onDeleted = onDeleted, detail = true) }
-            if (comments.isEmpty()) {
+            if (tops.isEmpty()) {
                 item(key = "none") { Text("No comments yet. Say something nice.", color = c.inkMuted, modifier = Modifier.padding(24.dp)) }
             }
-            items(comments, key = { it.id }) { comment ->
-                val author = comment.author ?: return@items
-                val canDelete = comment.authorId == app.userId || post.authorId == app.userId || me?.isAdmin == true
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.Top) {
-                    Avatar(author.avatarPath, author.fullName, 32.dp, Modifier.clickable { nav.profile(author.username) })
-                    Spacer(Modifier.width(10.dp))
-                    Column(Modifier.weight(1f)) {
-                        MentionText(comment.body, prefix = author.username)
-                        Text(timeAgo(comment.createdAt), color = c.inkFaint, style = MaterialTheme.typography.bodySmall)
-                    }
-                    if (canDelete) {
-                        IconButton(onClick = { deleting = comment }, modifier = Modifier.size(32.dp)) {
-                            Icon(Lucide.Trash, "Delete comment", tint = c.inkFaint, modifier = Modifier.size(16.dp))
-                        }
-                    }
-                }
+            tops.forEach { top ->
+                item(key = top.id) { commentRow(top, false) }
+                items(replies[top.id].orEmpty(), key = { it.id }) { commentRow(it, true) }
             }
         }
         MentionSuggestions(draft, onPick = { draft = it })
         HorizontalDivider(color = c.line)
+        replyTo?.let { target ->
+            Row(
+                Modifier.fillMaxWidth().background(c.surface2).padding(start = 16.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Replying to @${target.username}", color = c.inkMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                IconButton(onClick = { replyTo = null; draft = TextFieldValue("") }, modifier = Modifier.size(34.dp)) {
+                    Icon(Lucide.X, "Cancel reply", tint = c.inkMuted, modifier = Modifier.size(16.dp))
+                }
+            }
+        }
         Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             me?.let { Avatar(it.avatarPath, it.fullName, 30.dp) }
             Spacer(Modifier.width(8.dp))
             OutlinedTextField(
                 value = draft,
                 onValueChange = { if (it.text.length <= 1000) draft = it },
-                placeholder = { Text("Add a comment…") },
+                placeholder = { Text(replyTo?.let { "Reply to @${it.username}…" } ?: "Add a comment…") },
                 shape = RoundedCornerShape(24.dp),
                 colors = fieldColors(),
                 maxLines = 4,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).focusRequester(focus),
             )
             IconButton(
                 enabled = draft.text.isNotBlank() && !sending,
                 onClick = {
                     val author = me?.person ?: return@IconButton
+                    val parent = replyTo?.commentId
                     sending = true
                     scope.launch {
                         try {
-                            comments = comments + Posts.addComment(post.id, author, draft.text.trim())
+                            comments = comments + Posts.addComment(post.id, author, draft.text.trim(), parent)
                             draft = TextFieldValue("")
+                            replyTo = null
                         } catch (e: Exception) {
                             toast(e.friendly("Couldn't post your comment."))
                         } finally {
@@ -161,15 +223,25 @@ private fun PostWithCommentsView(post: Post, initial: List<Comment>, onDeleted: 
     }
 
     deleting?.let { target ->
+        val replyCount = replies[target.id].orEmpty().size
         ConfirmDialog(
-            title = "Delete this comment?",
+            title = when (replyCount) {
+                0 -> "Delete this comment?"
+                1 -> "Delete this comment and its reply?"
+                else -> "Delete this comment and its $replyCount replies?"
+            },
             text = "It will be removed for everyone.",
             confirmLabel = "Delete",
             onConfirm = {
                 scope.launch {
                     try {
                         Posts.deleteComment(target.id)
-                        comments = comments.filter { it.id != target.id }
+                        // Its replies go with it (on delete cascade).
+                        comments = comments.filter { it.id != target.id && it.parentId != target.id }
+                        if (replyTo?.commentId == target.id) {
+                            replyTo = null
+                            draft = TextFieldValue("")
+                        }
                     } catch (e: Exception) {
                         toast(e.friendly("Couldn't delete the comment."))
                     }
@@ -177,6 +249,63 @@ private fun PostWithCommentsView(post: Post, initial: List<Comment>, onDeleted: 
             },
             onDismiss = { deleting = null },
         )
+    }
+}
+
+/** One comment; a reply is indented under its top comment. */
+@Composable
+private fun CommentRow(
+    comment: Comment,
+    reply: Boolean,
+    liked: Boolean,
+    canDelete: Boolean,
+    onReply: () -> Unit,
+    onLike: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val c = Dheu.colors
+    val nav = LocalNav.current
+    val author = comment.author ?: return
+    val meta = MaterialTheme.typography.bodySmall
+    Row(
+        Modifier.fillMaxWidth().padding(start = if (reply) 58.dp else 16.dp, end = 4.dp, top = 8.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Avatar(author.avatarPath, author.fullName, if (reply) 26.dp else 32.dp, Modifier.clickable { nav.profile(author.username) })
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            MentionText(comment.body, prefix = author.username)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text(timeAgo(comment.createdAt), color = c.inkFaint, style = meta)
+                if (comment.likes.isNotEmpty()) {
+                    val n = comment.likes.size
+                    Text(if (n == 1) "1 like" else "$n likes", color = c.inkFaint, style = meta, fontWeight = FontWeight.SemiBold)
+                }
+                Text(
+                    "Reply",
+                    color = c.inkFaint,
+                    style = meta,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable(onClick = onReply).padding(vertical = 6.dp, horizontal = 2.dp),
+                )
+                if (canDelete) {
+                    Icon(
+                        Lucide.Trash,
+                        "Delete comment",
+                        tint = c.inkFaint,
+                        modifier = Modifier.clip(CircleShape).clickable(onClick = onDelete).padding(6.dp).size(14.dp),
+                    )
+                }
+            }
+        }
+        IconButton(onClick = onLike, modifier = Modifier.size(36.dp)) {
+            Icon(
+                if (liked) Lucide.HeartFilled else Lucide.Heart,
+                if (liked) "Unlike comment" else "Like comment",
+                tint = if (liked) c.like else c.inkFaint,
+                modifier = Modifier.size(15.dp),
+            )
+        }
     }
 }
 

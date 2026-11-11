@@ -12,6 +12,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import java.text.Collator
 
 /** Who I follow and who I've asked to follow, for lists of people. */
 class Relationships(val following: Set<String>, val requested: Set<String>) {
@@ -137,6 +138,44 @@ object Profiles {
             filter { eq("blocker_id", me) }
             order("created_at", Order.DESCENDING)
         }.decodeList<PersonRow>().mapNotNull { it.profile }
+
+    // ---- close friends (0024): only I can read my list; a block takes people off it ----
+
+    class CloseFriendChoices(val people: List<Person>, val chosen: Set<String>)
+
+    @Serializable
+    private data class FriendId(@SerialName("friend_id") val friendId: String)
+
+    suspend fun closeFriendIds(me: String): Set<String> =
+        client.from("close_friends").select(Columns.raw("friend_id")) { filter { eq("owner_id", me) } }
+            .decodeList<FriendId>().map { it.friendId }.toSet()
+
+    /** Everyone I follow or who follows me, by name (as on the website), and who's on my list. */
+    suspend fun closeFriendChoices(me: String): CloseFriendChoices = coroutineScope {
+        val following = async { following(me) }
+        val followers = async { followers(me) }
+        val chosen = async { closeFriendIds(me) }
+        val people = (following.await() + followers.await())
+            .filter { it.id != me }
+            .distinctBy { it.id }
+            .sortedWith(compareBy(Collator.getInstance()) { it.fullName })
+        CloseFriendChoices(people, chosen.await())
+    }
+
+    @Serializable
+    private data class CloseFriendInsert(@SerialName("owner_id") val ownerId: String, @SerialName("friend_id") val friendId: String)
+
+    suspend fun addCloseFriend(me: String, friendId: String) {
+        try {
+            client.from("close_friends").insert(CloseFriendInsert(me, friendId))
+        } catch (e: Exception) {
+            if (e.pgCode != "23505") throw e // already on the list: fine
+        }
+    }
+
+    suspend fun removeCloseFriend(me: String, friendId: String) {
+        client.from("close_friends").delete { filter { eq("owner_id", me); eq("friend_id", friendId) } }
+    }
 
     suspend fun canViewContentOf(authorId: String): Boolean =
         Backend.db.rpc("can_view_content_of", buildJsonObject { put("p_author", authorId) }).decodeAs<Boolean>()

@@ -57,6 +57,7 @@ import coil3.compose.AsyncImage
 import com.salmansaadiq.dheu.data.Backend
 import com.salmansaadiq.dheu.data.Buckets
 import com.salmansaadiq.dheu.ui.icons.Lucide
+import com.salmansaadiq.dheu.ui.theme.CloseFriendsGreen
 import com.salmansaadiq.dheu.ui.theme.Dheu
 
 // ---- people -------------------------------------------------------------------
@@ -99,14 +100,18 @@ fun Avatar(path: String?, name: String, size: Dp, modifier: Modifier = Modifier)
     }
 }
 
-/** Gradient ring for unseen stories, flat for seen ones, none when null. */
+/**
+ * Gradient ring for unseen stories (green when one of them is for close
+ * friends, 0024), flat for seen ones, none when null.
+ */
 @Composable
-fun StoryRing(seen: Boolean?, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+fun StoryRing(seen: Boolean?, modifier: Modifier = Modifier, closeFriends: Boolean = false, content: @Composable () -> Unit) {
     val c = Dheu.colors
     val ring = when (seen) {
         null -> null
         true -> Modifier.border(2.5.dp, c.line, CircleShape)
-        false -> Modifier.border(BorderStroke(2.5.dp, Brush.sweepGradient(listOf(c.waveA, c.waveB, c.waveA))), CircleShape)
+        false -> if (closeFriends) Modifier.border(2.5.dp, CloseFriendsGreen, CircleShape)
+        else Modifier.border(BorderStroke(2.5.dp, Brush.sweepGradient(listOf(c.waveA, c.waveB, c.waveA))), CircleShape)
     }
     Box(modifier.then(ring ?: Modifier).padding(4.dp), contentAlignment = Alignment.Center) { content() }
 }
@@ -124,16 +129,20 @@ fun PrimaryButton(
     loading: Boolean = false,
     icon: ImageVector? = null,
     compact: Boolean = false,
+    /** Another fill than the brand teal (e.g. close friends green), with white text. */
+    color: Color? = null,
 ) {
     val c = Dheu.colors
+    val bg = color ?: c.brand
+    val fg = if (color != null) Color.White else c.brandInk
     Button(
         onClick = onClick,
         enabled = enabled && !loading,
         shape = ButtonShape,
-        colors = ButtonDefaults.buttonColors(containerColor = c.brand, contentColor = c.brandInk, disabledContainerColor = c.brand.copy(alpha = 0.55f), disabledContentColor = c.brandInk),
+        colors = ButtonDefaults.buttonColors(containerColor = bg, contentColor = fg, disabledContainerColor = bg.copy(alpha = 0.55f), disabledContentColor = fg),
         contentPadding = if (compact) PaddingValues(horizontal = 14.dp, vertical = 6.dp) else ButtonDefaults.ContentPadding,
         modifier = modifier,
-    ) { ButtonContent(text, loading, icon, c.brandInk) }
+    ) { ButtonContent(text, loading, icon, fg) }
 }
 
 @Composable

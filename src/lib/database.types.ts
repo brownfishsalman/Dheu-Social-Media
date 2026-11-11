@@ -19,6 +19,7 @@ export type NotificationType =
   | "follow_accepted"
   | "mention"; // caption / comment (post_id, comment_id) or group message (conversation_id, message_id), see 0020
 export type MessageKind = "text" | "system";
+export type StoryAudience = "everyone" | "close_friends"; // 0024
 
 type Simplify<T> = { [K in keyof T]: T[K] } & {};
 
@@ -61,6 +62,11 @@ type Overrides = {
         Row: { platform: "android" };
         Insert: { platform?: "android" };
         Update: { platform?: "android" };
+      };
+      stories: {
+        Row: { audience: StoryAudience };
+        Insert: { audience?: StoryAudience };
+        Update: { audience?: StoryAudience };
       };
     };
     Views: {

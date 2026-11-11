@@ -6,6 +6,11 @@ import type { Profile } from "@/lib/database.types";
 
 type Props = { groups: StoryGroup[]; me: Profile };
 
+// Unseen: the wave gradient, or green when some story is for close friends. Seen: grey.
+function ringClass(g: StoryGroup) {
+  return g.allSeen ? "ring-story-seen" : g.closeFriends ? "ring-close" : "ring-story";
+}
+
 // Horizontal strip of story rings at the top of the feed.
 export function StoryBar({ groups, me }: Props) {
   const mine = groups.find((g) => g.author.id === me.id);
@@ -18,7 +23,7 @@ export function StoryBar({ groups, me }: Props) {
         href={mine ? `/stories/${me.id}` : "/stories/new"}
         className="flex w-[68px] shrink-0 flex-col items-center gap-1.5"
       >
-        <span className={`relative rounded-full p-[2.5px] ${mine ? (mine.allSeen ? "ring-story-seen" : "ring-story") : ""}`}>
+        <span className={`relative rounded-full p-[2.5px] ${mine ? ringClass(mine) : ""}`}>
           <span className="block rounded-full border-2 border-surface">
             <Avatar path={me.avatar_path} name={me.full_name} size={56} />
           </span>
@@ -37,7 +42,7 @@ export function StoryBar({ groups, me }: Props) {
           href={`/stories/${g.author.id}`}
           className="flex w-[68px] shrink-0 flex-col items-center gap-1.5"
         >
-          <span className={`rounded-full p-[2.5px] ${g.allSeen ? "ring-story-seen" : "ring-story"}`}>
+          <span className={`rounded-full p-[2.5px] ${ringClass(g)}`}>
             <span className="block rounded-full border-2 border-surface">
               <Avatar path={g.author.avatar_path} name={g.author.full_name} size={56} />
             </span>

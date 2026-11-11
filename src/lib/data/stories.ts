@@ -1,9 +1,11 @@
 import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
-import type { Profile } from "@/lib/database.types";
+import type { Profile, StoryAudience } from "@/lib/database.types";
 
 export type StoryAuthor = Pick<Profile, "id" | "username" | "full_name" | "avatar_path">;
+
+export type { StoryAudience };
 
 export type StoryItem = {
   id: string;
@@ -14,6 +16,7 @@ export type StoryItem = {
   created_at: string;
   expires_at: string;
   seen: boolean;
+  audience: StoryAudience; // close friends only, or everyone (0024)
 };
 
 export type StoryGroup = {
@@ -21,6 +24,7 @@ export type StoryGroup = {
   stories: StoryItem[];
   allSeen: boolean;
   latestAt: string;
+  closeFriends: boolean; // some story here is for close friends: a green ring
 };
 
 // Active stories from me + people I follow, grouped per author for the story bar.
@@ -31,7 +35,7 @@ export async function getStoryFeed(viewerId: string, followingIds: string[]): Pr
   const { data } = await supabase
     .from("stories")
     .select(
-      "id, author_id, image_path, width, height, created_at, expires_at, author:profiles!stories_author_id_fkey(id, username, full_name, avatar_path), views:story_views(viewer_id)",
+      "id, author_id, image_path, width, height, created_at, expires_at, audience, author:profiles!stories_author_id_fkey(id, username, full_name, avatar_path), views:story_views(viewer_id)",
     )
     .in("author_id", authorIds)
     .gt("expires_at", new Date().toISOString())
@@ -50,16 +54,19 @@ export async function getStoryFeed(viewerId: string, followingIds: string[]): Pr
       created_at: s.created_at,
       expires_at: s.expires_at,
       seen,
+      audience: s.audience,
     };
     const g = groups.get(s.author_id) ?? {
       author: s.author,
       stories: [],
       allSeen: true,
       latestAt: s.created_at,
+      closeFriends: false,
     };
     g.stories.push(item);
     g.allSeen = g.allSeen && seen;
     g.latestAt = s.created_at;
+    g.closeFriends = g.closeFriends || s.audience === "close_friends";
     groups.set(s.author_id, g);
   }
 
@@ -101,8 +108,9 @@ export async function getHighlights(ownerId: string): Promise<HighlightSummary[]
     id: h.id,
     title: h.title,
     position: h.position,
-    cover_path: h.cover?.image_path ?? h.items[0]?.story?.image_path ?? null,
-    count: h.items.length,
+    cover_path: h.cover?.image_path ?? h.items.find((i) => i.story)?.story?.image_path ?? null,
+    // Close-friends stories come back empty for everyone else (RLS); don't count them.
+    count: h.items.filter((i) => i.story).length,
   }));
 }
 
@@ -119,7 +127,7 @@ export const getHighlight = cache(async (highlightId: string): Promise<Highlight
   const { data } = await supabase
     .from("story_highlights")
     .select(
-      "id, title, owner:profiles!story_highlights_owner_id_fkey(id, username, full_name, avatar_path), items:highlight_items(added_at, story:stories(id, author_id, image_path, width, height, created_at, expires_at))",
+      "id, title, owner:profiles!story_highlights_owner_id_fkey(id, username, full_name, avatar_path), items:highlight_items(added_at, story:stories(id, author_id, image_path, width, height, created_at, expires_at, audience))",
     )
     .eq("id", highlightId)
     .maybeSingle();

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { LogOut, Shield } from "lucide-react";
+import { ChevronRight, LogOut, Shield, Star } from "lucide-react";
 import { requireProfile } from "@/lib/data/session";
 import { getBlockedProfiles } from "@/lib/data/profiles";
 import { getSiteUrl } from "@/lib/site-url";
@@ -20,10 +20,11 @@ export const metadata: Metadata = { title: "Settings" };
 export default async function SettingsPage() {
   const profile = await requireProfile();
   const supabase = await createClient();
-  const [siteUrl, blocked, { data: myCodes }] = await Promise.all([
+  const [siteUrl, blocked, { data: myCodes }, { count: closeFriends }] = await Promise.all([
     getSiteUrl(),
     getBlockedProfiles(profile.id),
     supabase.from("invite_codes").select("*").eq("created_by", profile.id).order("created_at", { ascending: false }),
+    supabase.from("close_friends").select("friend_id", { count: "exact", head: true }).eq("owner_id", profile.id),
   ]);
 
   return (
@@ -40,6 +41,16 @@ export default async function SettingsPage() {
           <h2 className="mb-1 font-display text-lg font-semibold">Account privacy</h2>
           <p className="mb-3 text-sm text-ink-muted">Who can see your posts, stories and followers.</p>
           <PrivacySettings isPrivate={profile.is_private} />
+        </section>
+
+        <section className="card p-5">
+          <h2 className="mb-1 font-display text-lg font-semibold">Close friends</h2>
+          <p className="mb-3 text-sm text-ink-muted">The people who see the stories you share to close friends, with a green ring.</p>
+          <Link href="/settings/close-friends" className="btn-secondary">
+            <Star className="size-4" />
+            {closeFriends ? `Edit your list (${closeFriends})` : "Choose close friends"}
+            <ChevronRight className="size-4" />
+          </Link>
         </section>
 
         <section className="card p-5">

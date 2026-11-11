@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ImagePlus, X, Loader2 } from "lucide-react";
+import { ImagePlus, X, Loader2, Star } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { processImage, STORY_MAX, ACCEPT_ATTR, newImagePath, type ProcessedImage } from "@/lib/images";
 
@@ -11,7 +11,7 @@ export function NewStoryForm({ userId }: { userId: string }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [image, setImage] = useState<ProcessedImage | null>(null);
   const [processing, setProcessing] = useState(false);
-  const [posting, setPosting] = useState(false);
+  const [posting, setPosting] = useState<"everyone" | "close_friends" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
@@ -30,9 +30,10 @@ export function NewStoryForm({ userId }: { userId: string }) {
     }
   }
 
-  async function share() {
+  // Everyone who can see my stories, or only my close friends (0024).
+  async function share(audience: "everyone" | "close_friends") {
     if (!image) return;
-    setPosting(true);
+    setPosting(audience);
     setError(null);
     const supabase = createClient();
     const path = newImagePath(userId);
@@ -40,15 +41,15 @@ export function NewStoryForm({ userId }: { userId: string }) {
       .from("stories")
       .upload(path, image.blob, { contentType: "image/jpeg", cacheControl: "86400" });
     if (upErr) {
-      setPosting(false);
+      setPosting(null);
       return setError(upErr.message);
     }
     const { error: dbErr } = await supabase
       .from("stories")
-      .insert({ author_id: userId, image_path: path, width: image.width, height: image.height });
+      .insert({ author_id: userId, image_path: path, width: image.width, height: image.height, audience });
     if (dbErr) {
       await supabase.storage.from("stories").remove([path]);
-      setPosting(false);
+      setPosting(null);
       return setError(dbErr.message);
     }
     URL.revokeObjectURL(image.previewUrl);
@@ -95,17 +96,29 @@ export function NewStoryForm({ userId }: { userId: string }) {
         </p>
       )}
 
+      {image && (
+        <button type="button" onClick={() => fileRef.current?.click()} className="btn-secondary w-full" disabled={posting !== null}>
+          Change photo
+        </button>
+      )}
       <div className="flex gap-3">
-        {image && (
-          <button type="button" onClick={() => fileRef.current?.click()} className="btn-secondary flex-1" disabled={posting}>
-            Change photo
-          </button>
-        )}
-        <button type="button" onClick={share} className="btn-primary flex-1" disabled={!image || posting}>
-          {posting && <Loader2 className="size-4 animate-spin" />}
-          {posting ? "Sharing…" : "Share to story"}
+        <button type="button" onClick={() => share("everyone")} className="btn-primary flex-1" disabled={!image || posting !== null}>
+          {posting === "everyone" && <Loader2 className="size-4 animate-spin" />}
+          {posting === "everyone" ? "Sharing…" : "Your story"}
+        </button>
+        <button
+          type="button"
+          onClick={() => share("close_friends")}
+          className="btn bg-close flex-1 text-white hover:brightness-95"
+          disabled={!image || posting !== null}
+        >
+          {posting === "close_friends" ? <Loader2 className="size-4 animate-spin" /> : <Star className="size-4 fill-current" />}
+          {posting === "close_friends" ? "Sharing…" : "Close friends"}
         </button>
       </div>
+      <p className="text-center text-xs text-ink-faint">
+        Close friends stories only reach the people on your list (Settings → Close friends), with a green ring.
+      </p>
     </div>
   );
 }

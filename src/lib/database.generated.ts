@@ -99,12 +99,79 @@ export type Database = {
           },
         ]
       }
+      close_friends: {
+        Row: {
+          created_at: string
+          friend_id: string
+          owner_id: string
+        }
+        Insert: {
+          created_at?: string
+          friend_id: string
+          owner_id: string
+        }
+        Update: {
+          created_at?: string
+          friend_id?: string
+          owner_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "close_friends_friend_id_fkey"
+            columns: ["friend_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "close_friends_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comment_likes: {
+        Row: {
+          comment_id: string
+          created_at: string
+          user_id: string
+        }
+        Insert: {
+          comment_id: string
+          created_at?: string
+          user_id: string
+        }
+        Update: {
+          comment_id?: string
+          created_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comment_likes_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comment_likes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       comments: {
         Row: {
           author_id: string
           body: string
           created_at: string
           id: string
+          parent_id: string | null
           post_id: string
         }
         Insert: {
@@ -112,6 +179,7 @@ export type Database = {
           body: string
           created_at?: string
           id?: string
+          parent_id?: string | null
           post_id: string
         }
         Update: {
@@ -119,6 +187,7 @@ export type Database = {
           body?: string
           created_at?: string
           id?: string
+          parent_id?: string | null
           post_id?: string
         }
         Relationships: [
@@ -127,6 +196,13 @@ export type Database = {
             columns: ["author_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
             referencedColumns: ["id"]
           },
           {
@@ -996,8 +1072,56 @@ export type Database = {
           },
         ]
       }
+      saved_posts: {
+        Row: {
+          created_at: string
+          post_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          post_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          post_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_posts_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "home_feed"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_posts_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "post_feed"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_posts_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_posts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stories: {
         Row: {
+          audience: string
           author_id: string
           created_at: string
           expires_at: string
@@ -1007,6 +1131,7 @@ export type Database = {
           width: number
         }
         Insert: {
+          audience?: string
           author_id: string
           created_at?: string
           expires_at?: string
@@ -1016,6 +1141,7 @@ export type Database = {
           width: number
         }
         Update: {
+          audience?: string
           author_id?: string
           created_at?: string
           expires_at?: string
@@ -1193,6 +1319,7 @@ export type Database = {
           id: string | null
           like_count: number | null
           liked_by_me: boolean | null
+          saved_by_me: boolean | null
         }
         Insert: {
           author_id?: string | null
@@ -1203,6 +1330,7 @@ export type Database = {
           id?: string | null
           like_count?: never
           liked_by_me?: never
+          saved_by_me?: never
         }
         Update: {
           author_id?: string | null
@@ -1213,6 +1341,7 @@ export type Database = {
           id?: string | null
           like_count?: never
           liked_by_me?: never
+          saved_by_me?: never
         }
         Relationships: [
           {
@@ -1234,6 +1363,7 @@ export type Database = {
           id: string | null
           like_count: number | null
           liked_by_me: boolean | null
+          saved_by_me: boolean | null
         }
         Insert: {
           author_id?: string | null
@@ -1244,6 +1374,7 @@ export type Database = {
           id?: string | null
           like_count?: never
           liked_by_me?: never
+          saved_by_me?: never
         }
         Update: {
           author_id?: string | null
@@ -1254,6 +1385,7 @@ export type Database = {
           id?: string | null
           like_count?: never
           liked_by_me?: never
+          saved_by_me?: never
         }
         Relationships: [
           {

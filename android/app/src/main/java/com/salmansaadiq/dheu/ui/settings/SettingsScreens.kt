@@ -24,11 +24,16 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -36,18 +41,23 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -55,6 +65,7 @@ import com.salmansaadiq.dheu.BuildConfig
 import com.salmansaadiq.dheu.core.parseInstant
 import com.salmansaadiq.dheu.data.Account
 import com.salmansaadiq.dheu.data.InviteCode
+import com.salmansaadiq.dheu.data.Person
 import com.salmansaadiq.dheu.data.Profiles
 import com.salmansaadiq.dheu.data.Push
 import com.salmansaadiq.dheu.data.PushPrefs
@@ -67,17 +78,21 @@ import com.salmansaadiq.dheu.ui.components.Avatar
 import com.salmansaadiq.dheu.ui.components.ConfirmDialog
 import com.salmansaadiq.dheu.ui.components.DheuTextField
 import com.salmansaadiq.dheu.ui.components.DheuTopBar
+import com.salmansaadiq.dheu.ui.components.EmptyState
 import com.salmansaadiq.dheu.ui.components.ErrorState
 import com.salmansaadiq.dheu.ui.components.Loading
 import com.salmansaadiq.dheu.ui.components.PersonRow
 import com.salmansaadiq.dheu.ui.components.PrimaryButton
 import com.salmansaadiq.dheu.ui.components.SecondaryButton
+import com.salmansaadiq.dheu.ui.components.fieldColors
 import com.salmansaadiq.dheu.ui.components.rememberToast
 import com.salmansaadiq.dheu.ui.icons.Lucide
 import com.salmansaadiq.dheu.ui.nav.BlockedRoute
+import com.salmansaadiq.dheu.ui.nav.CloseFriendsRoute
 import com.salmansaadiq.dheu.ui.nav.EditProfileRoute
 import com.salmansaadiq.dheu.ui.nav.LocalNav
 import com.salmansaadiq.dheu.ui.rememberLoader
+import com.salmansaadiq.dheu.ui.theme.CloseFriendsGreen
 import com.salmansaadiq.dheu.ui.theme.Dheu
 import com.salmansaadiq.dheu.ui.theme.ThemeMode
 import kotlinx.coroutines.launch
@@ -138,6 +153,8 @@ fun SettingsScreen() {
             Card("Read receipts", "Whether people see \"Seen\" when you've read their messages.") {
                 ReadReceiptsSetting(profile.id, profile.readReceipts, onSaved = app::refreshMe)
             }
+
+            CloseFriendsCard(profile.id)
 
             Card("Notifications", "Messages, mentions, comments, likes and follow requests on this phone.") {
                 NotificationsSetting()
@@ -433,6 +450,124 @@ fun BlockedScreen() {
                     }
                 }
         }
+    }
+}
+
+/** How many people are on my close friends list (0024), and the way in to edit it. */
+@Composable
+private fun CloseFriendsCard(me: String) {
+    val nav = LocalNav.current
+    // Kept across the trip to the list and back, then caught up, so it doesn't flicker.
+    var count by rememberSaveable { mutableStateOf<Int?>(null) }
+    LaunchedEffect(Unit) { runCatching { Profiles.closeFriendIds(me).size }.onSuccess { count = it } }
+    Card("Close friends", "The people who see the stories you share to close friends, with a green ring.") {
+        val n = count ?: 0
+        SecondaryButton(if (n > 0) "Edit your list ($n)" else "Choose close friends", { nav.to(CloseFriendsRoute) }, icon = Lucide.Star)
+    }
+}
+
+/**
+ * Settings → Close friends (0024): star the people who see your close friends
+ * stories. Only you can see this list; nobody is told they're on it.
+ */
+@Composable
+fun CloseFriendsScreen() {
+    val nav = LocalNav.current
+    val me = LocalAppState.current.userId
+    val loader = rememberLoader("close-friends") { Profiles.closeFriendChoices(me) }
+    Column(Modifier.fillMaxSize().background(Dheu.colors.surface)) {
+        DheuTopBar("Close friends", onBack = nav::back)
+        when (val s = loader.state) {
+            Load.Loading -> Loading()
+            is Load.Failed -> ErrorState(s.message, onRetry = { loader.reload() })
+            is Load.Ready -> CloseFriendsList(me, s.value)
+        }
+    }
+}
+
+@Composable
+private fun CloseFriendsList(me: String, choices: Profiles.CloseFriendChoices) {
+    val c = Dheu.colors
+    val scope = rememberCoroutineScope()
+    val toast = rememberToast()
+    var on by remember(choices) { mutableStateOf(choices.chosen) }
+    var query by rememberSaveable { mutableStateOf("") }
+    // Close friends first (as the list opened), then everyone else, each by name.
+    // The order stays put while you tap, so rows don't jump under your finger.
+    val ordered = remember(choices) { choices.people.sortedBy { it.id !in choices.chosen } }
+    val q = query.trim().lowercase()
+    val shown = if (q.isEmpty()) ordered else ordered.filter { it.username.contains(q) || it.fullName.lowercase().contains(q) }
+
+    fun toggle(p: Person) {
+        val adding = p.id !in on
+        on = if (adding) on + p.id else on - p.id
+        scope.launch {
+            try {
+                if (adding) Profiles.addCloseFriend(me, p.id) else Profiles.removeCloseFriend(me, p.id)
+            } catch (e: Exception) {
+                on = if (adding) on - p.id else on + p.id
+                toast(e.friendly("Couldn't save that. Please try again."))
+            }
+        }
+    }
+
+    LazyColumn(Modifier.fillMaxSize().imePadding()) {
+        item(key = "intro") {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    (if (on.isEmpty()) "Nobody yet." else "${on.size} ${if (on.size == 1) "person" else "people"}.") +
+                        " Only you can see this list, and nobody is told when you add them.",
+                    color = c.inkMuted,
+                )
+                if (choices.people.isNotEmpty()) {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        placeholder = { Text("Search people you follow or who follow you") },
+                        leadingIcon = { Icon(Lucide.Search, null, tint = c.inkFaint) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = fieldColors(),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        }
+        if (choices.people.isEmpty()) {
+            item(key = "empty") { EmptyState("No one to add yet", "Follow people, or wait for them to follow you, to add them here.") }
+        } else if (shown.isEmpty()) {
+            item(key = "none") { Text("No one matches that.", color = c.inkMuted, modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp)) }
+        }
+        items(shown, key = { it.id }) { p ->
+            val isOn = p.id in on
+            Row(
+                Modifier.fillMaxWidth()
+                    .toggleable(value = isOn, role = Role.Checkbox, onValueChange = { toggle(p) })
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Avatar(p.avatarPath, p.fullName, 44.dp)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(p.fullName, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("@${p.username}", color = c.inkMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Spacer(Modifier.width(12.dp))
+                Box(
+                    Modifier.size(32.dp).clip(CircleShape)
+                        .then(if (isOn) Modifier.background(CloseFriendsGreen) else Modifier.border(2.dp, c.line, CircleShape)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        if (isOn) Lucide.StarFilled else Lucide.Star,
+                        null,
+                        tint = if (isOn) Color.White else c.inkFaint,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+        }
+        item(key = "end") { Spacer(Modifier.navigationBarsPadding().height(16.dp)) }
     }
 }
 

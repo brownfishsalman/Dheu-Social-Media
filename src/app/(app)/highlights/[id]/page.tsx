@@ -17,7 +17,7 @@ export default async function HighlightPage(props: PageProps<"/highlights/[id]">
 
   return (
     <StoryViewer
-      group={{ author: h.owner, stories: h.stories, allSeen: true, latestAt: "" }}
+      group={{ author: h.owner, stories: h.stories, allSeen: true, latestAt: "", closeFriends: false }}
       viewerId={me.id}
       isOwner={me.id === h.owner.id}
       mode="highlight"

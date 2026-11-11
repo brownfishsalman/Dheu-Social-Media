@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { X, Pause, Play, Eye, Trash2, Bookmark, Send, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { X, Pause, Play, Eye, Trash2, Bookmark, Send, Loader2, ChevronLeft, ChevronRight, Star } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { publicUrl } from "@/lib/storage";
 import { timeAgo } from "@/lib/time";
@@ -342,6 +342,11 @@ export function StoryViewer(props: ViewerProps) {
             <span className="text-xs text-white/70">
               {mode === "highlight" && highlight ? highlight.title : timeAgo(current.created_at)}
             </span>
+            {current.audience === "close_friends" && (
+              <span className="bg-close flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold text-white">
+                <Star className="size-3 fill-current" /> Close friends
+              </span>
+            )}
             <button
               type="button"
               onClick={() => setPaused((p) => !p)}

@@ -52,6 +52,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.salmansaadiq.dheu.data.AUDIENCE_CLOSE_FRIENDS
+import com.salmansaadiq.dheu.data.AUDIENCE_EVERYONE
 import com.salmansaadiq.dheu.data.Posts
 import com.salmansaadiq.dheu.data.Stories
 import com.salmansaadiq.dheu.data.friendly
@@ -61,6 +63,7 @@ import com.salmansaadiq.dheu.ui.components.DheuTopBar
 import com.salmansaadiq.dheu.ui.components.PrimaryButton
 import com.salmansaadiq.dheu.ui.icons.Lucide
 import com.salmansaadiq.dheu.ui.nav.LocalNav
+import com.salmansaadiq.dheu.ui.theme.CloseFriendsGreen
 import com.salmansaadiq.dheu.ui.theme.Dheu
 import kotlinx.coroutines.launch
 
@@ -184,10 +187,28 @@ private fun NewStory() {
     val c = Dheu.colors
     val scope = rememberCoroutineScope()
     var photo by remember { mutableStateOf<Uri?>(null) }
-    var posting by remember { mutableStateOf(false) }
+    var posting by remember { mutableStateOf<String?>(null) } // the audience it's going to
     var error by remember { mutableStateOf<String?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> if (uri != null) photo = uri }
     fun pick() = picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+
+    // Everyone who can see my stories, or only my close friends (0024).
+    fun share(audience: String) {
+        val uri = photo ?: return
+        posting = audience
+        error = null
+        scope.launch {
+            try {
+                Stories.create(context, me, uri, audience)
+                photo = null
+                nav.story(me)
+            } catch (e: Exception) {
+                error = e.friendly("Couldn't share your story.")
+            } finally {
+                posting = null
+            }
+        }
+    }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
         val chosen = photo
@@ -201,30 +222,27 @@ private fun NewStory() {
         }
         error?.let { Text(it, color = c.danger, modifier = Modifier.padding(top = 8.dp)) }
         Spacer(Modifier.height(16.dp))
-        PrimaryButton(
-            "Share to your story",
-            onClick = {
-                val uri = photo ?: return@PrimaryButton
-                posting = true
-                error = null
-                scope.launch {
-                    try {
-                        Stories.create(context, me, uri)
-                        photo = null
-                        nav.story(me)
-                    } catch (e: Exception) {
-                        error = e.friendly("Couldn't share your story.")
-                    } finally {
-                        posting = false
-                    }
-                }
-            },
-            enabled = photo != null,
-            loading = posting,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            PrimaryButton(
+                if (posting == AUDIENCE_EVERYONE) "Sharing…" else "Your story",
+                onClick = { share(AUDIENCE_EVERYONE) },
+                enabled = photo != null && posting == null,
+                loading = posting == AUDIENCE_EVERYONE,
+                modifier = Modifier.weight(1f),
+            )
+            PrimaryButton(
+                if (posting == AUDIENCE_CLOSE_FRIENDS) "Sharing…" else "Close friends",
+                onClick = { share(AUDIENCE_CLOSE_FRIENDS) },
+                enabled = photo != null && posting == null,
+                loading = posting == AUDIENCE_CLOSE_FRIENDS,
+                icon = Lucide.StarFilled,
+                color = CloseFriendsGreen,
+                modifier = Modifier.weight(1f),
+            )
+        }
         Text(
-            "Stories disappear after 24 hours, unless you add them to a highlight on the website.",
+            "Close friends stories only reach the people on your list (Settings → Close friends), with a green ring. " +
+                "Stories disappear after 24 hours, unless you add them to a highlight.",
             color = c.inkFaint,
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.bodySmall,

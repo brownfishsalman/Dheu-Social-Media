@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Heart, MessageCircle, MoreHorizontal, Link2, Trash2, Clock } from "lucide-react";
+import { Heart, MessageCircle, MoreHorizontal, Link2, Trash2, Clock, Bookmark, Download } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar } from "@/components/ui/Avatar";
 import { MentionText } from "@/components/ui/Mentions";
 import { Carousel } from "@/components/post/Carousel";
 import { timeAgo, expiresIn } from "@/lib/time";
-import { postImageFiles } from "@/lib/storage";
+import { postImageFiles, publicUrl } from "@/lib/storage";
 import type { FeedPost } from "@/lib/data/posts";
 
 export type Viewer = { id: string; isAdmin: boolean };
@@ -28,12 +28,51 @@ export function PostCard({ post, viewer, detail = false, priority, onDeleted, de
   const router = useRouter();
   const [liked, setLiked] = useState(post.liked_by_me);
   const [likeCount, setLikeCount] = useState(post.like_count);
+  const [saved, setSaved] = useState(post.saved_by_me);
   const [burst, setBurst] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [expanded, setExpanded] = useState(detail);
   const [, startTransition] = useTransition();
 
-  const canDelete = viewer.id === post.author_id || viewer.isAdmin;
+  const isMine = viewer.id === post.author_id;
+  const canDelete = isMine || viewer.isAdmin;
+
+  // Saved posts (0024): private to me, gone when the post expires.
+  async function toggleSave() {
+    const next = !saved;
+    setSaved(next);
+    const supabase = createClient();
+    const { error } = next
+      ? await supabase.from("saved_posts").insert({ user_id: viewer.id, post_id: post.id })
+      : await supabase.from("saved_posts").delete().match({ user_id: viewer.id, post_id: post.id });
+    if (error && !(next && error.code === "23505")) setSaved(!next);
+  }
+
+  // My own post, full size, one file per photo (before it expires).
+  async function downloadPhotos() {
+    setMenuOpen(false);
+    setDownloading(true);
+    try {
+      const day = post.created_at.slice(0, 10);
+      for (const [i, img] of post.images.entries()) {
+        const url = publicUrl("posts", img.path);
+        if (!url) continue;
+        const blob = await (await fetch(url)).blob();
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `dheu-${day}-${i + 1}.jpg`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      }
+    } catch {
+      alert("Couldn't download the photos.");
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   async function toggleLike(force?: boolean) {
     const next = force ?? !liked;
@@ -111,6 +150,11 @@ export function PostCard({ post, viewer, detail = false, priority, onDeleted, de
                 <div className="flex items-center gap-2.5 px-3.5 py-2 text-sm text-ink-muted">
                   <Clock className="size-4" /> {expiresIn(post.expires_at)}
                 </div>
+                {isMine && (
+                  <button type="button" onClick={downloadPhotos} className="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm hover:bg-surface-2">
+                    <Download className="size-4" /> Download {post.images.length === 1 ? "photo" : `${post.images.length} photos`}
+                  </button>
+                )}
                 {canDelete && (
                   <button type="button" onClick={deletePost} className="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-danger hover:bg-surface-2">
                     <Trash2 className="size-4" /> Delete post
@@ -153,6 +197,16 @@ export function PostCard({ post, viewer, detail = false, priority, onDeleted, de
             <MessageCircle className="size-[26px]" />
           </Link>
         )}
+        {downloading && <span className="px-1 text-xs text-ink-muted">Downloading…</span>}
+        <button
+          type="button"
+          onClick={toggleSave}
+          aria-pressed={saved}
+          aria-label={saved ? "Remove from saved" : "Save"}
+          className="ml-auto rounded-full p-2 transition active:scale-90"
+        >
+          <Bookmark className={`size-[26px] text-ink ${saved ? "fill-current" : ""}`} />
+        </button>
       </div>
 
       {/* Meta */}

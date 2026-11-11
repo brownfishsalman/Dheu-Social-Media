@@ -62,6 +62,9 @@ val DarkColors = DheuColors(
     danger = Color(0xFFF28B8B), dangerSoft = Color(0xFF3D1A1D), like = Color(0xFFF06B70), isDark = true,
 )
 
+/** Close-friends stories: the ring and badge, in both themes (the website's --color-close). */
+val CloseFriendsGreen = Color(0xFF1FB35A)
+
 val LocalDheuColors = staticCompositionLocalOf { LightColors }
 
 /** `Dheu.colors.brand` etc. */

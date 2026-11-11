@@ -89,6 +89,7 @@ import com.salmansaadiq.dheu.ui.profile.FollowListScreen
 import com.salmansaadiq.dheu.ui.profile.ProfileScreen
 import com.salmansaadiq.dheu.ui.search.SearchScreen
 import com.salmansaadiq.dheu.ui.settings.BlockedScreen
+import com.salmansaadiq.dheu.ui.settings.CloseFriendsScreen
 import com.salmansaadiq.dheu.ui.settings.EditProfileScreen
 import com.salmansaadiq.dheu.ui.settings.SettingsScreen
 import com.salmansaadiq.dheu.ui.stories.HighlightViewerScreen
@@ -122,6 +123,7 @@ import kotlin.reflect.KClass
 @Serializable object SettingsRoute
 @Serializable object EditProfileRoute
 @Serializable object BlockedRoute
+@Serializable object CloseFriendsRoute
 @Serializable object NewGroupRoute
 @Serializable data class GroupInfoRoute(val conversationId: String)
 @Serializable data class AddMembersRoute(val conversationId: String)
@@ -410,6 +412,7 @@ private fun MainNav() {
                 composable<SettingsRoute> { Page { SettingsScreen() } }
                 composable<EditProfileRoute> { Page { EditProfileScreen() } }
                 composable<BlockedRoute> { Page { BlockedScreen() } }
+                composable<CloseFriendsRoute> { Page { CloseFriendsScreen() } }
                 composable<NewGroupRoute> { Page { NewGroupScreen() } }
                 composable<GroupInfoRoute> { Page { GroupInfoScreen(it.toRoute<GroupInfoRoute>().conversationId) } }
                 composable<AddMembersRoute> { Page { AddMembersScreen(it.toRoute<AddMembersRoute>().conversationId) } }

@@ -16,7 +16,7 @@ object Stories {
     suspend fun feed(me: String, followingIds: List<String>): List<StoryGroup> {
         val rows = client.from("stories").select(
             Columns.raw(
-                "id, author_id, image_path, width, height, created_at, expires_at, " +
+                "id, author_id, image_path, width, height, created_at, expires_at, audience, " +
                     "author:profiles!stories_author_id_fkey($PERSON), views:story_views(viewer_id)",
             ),
         ) {
@@ -31,10 +31,15 @@ object Stories {
         for (s in rows) {
             val author = s.author ?: continue
             val seen = s.views.any { it.viewerId == me }
-            val story = Story(s.id, s.authorId, s.imagePath, s.width, s.height, s.createdAt, seen)
+            val story = Story(s.id, s.authorId, s.imagePath, s.width, s.height, s.createdAt, seen, s.audience)
             val g = groups[s.authorId]
-            groups[s.authorId] = if (g == null) StoryGroup(author, listOf(story), seen, s.createdAt)
-            else g.copy(stories = g.stories + story, allSeen = g.allSeen && seen, latestAt = s.createdAt)
+            groups[s.authorId] = if (g == null) StoryGroup(author, listOf(story), seen, s.createdAt, story.closeFriends)
+            else g.copy(
+                stories = g.stories + story,
+                allSeen = g.allSeen && seen,
+                latestAt = s.createdAt,
+                closeFriends = g.closeFriends || story.closeFriends,
+            )
         }
         return groups.values.sortedWith(
             compareBy<StoryGroup> { it.author.id != me }.thenBy { it.allSeen }.thenByDescending { it.latestAt },
@@ -77,14 +82,16 @@ object Stories {
         @SerialName("image_path") val imagePath: String,
         val width: Int,
         val height: Int,
+        val audience: String,
     )
 
-    suspend fun create(context: Context, me: String, uri: Uri) {
+    /** [audience]: everyone who can see my stories, or only my close friends (0024). */
+    suspend fun create(context: Context, me: String, uri: Uri, audience: String = AUDIENCE_EVERYONE) {
         val image = Images.encode(context, uri, Images.STORY)
         val path = Images.newPath(me)
         uploadFile(Buckets.STORIES, path, image.bytes, ContentType.Image.JPEG, CACHE_DAY)
         try {
-            client.from("stories").insert(StoryInsert(me, path, image.width, image.height))
+            client.from("stories").insert(StoryInsert(me, path, image.width, image.height, audience))
         } catch (e: Exception) {
             removeFiles(Buckets.STORIES, listOf(path))
             throw e
@@ -133,7 +140,8 @@ object Stories {
             order("position", Order.ASCENDING)
             order("created_at", Order.ASCENDING)
         }.decodeList<HighlightRow>().map { h ->
-            HighlightSummary(h.id, h.title, h.cover?.imagePath ?: h.items.firstNotNullOfOrNull { it.story?.imagePath }, h.items.size)
+            // Close-friends stories come back empty for everyone else (RLS); don't count them.
+            HighlightSummary(h.id, h.title, h.cover?.imagePath ?: h.items.firstNotNullOfOrNull { it.story?.imagePath }, h.items.count { it.story != null })
         }
 
     @Serializable
@@ -151,12 +159,12 @@ object Stories {
         val row = client.from("story_highlights").select(
             Columns.raw(
                 "id, title, owner:profiles!story_highlights_owner_id_fkey($PERSON), " +
-                    "items:highlight_items(story:stories(id, author_id, image_path, width, height, created_at, expires_at))",
+                    "items:highlight_items(story:stories(id, author_id, image_path, width, height, created_at, expires_at, audience))",
             ),
         ) { filter { eq("id", id) } }.decodeSingleOrNull<HighlightDetailRow>() ?: return null
         val owner = row.owner ?: return null
         val stories = row.items.mapNotNull { it.story }.sortedBy { it.createdAt }
-            .map { Story(it.id, it.authorId, it.imagePath, it.width, it.height, it.createdAt, seen = true) }
+            .map { Story(it.id, it.authorId, it.imagePath, it.width, it.height, it.createdAt, seen = true, audience = it.audience) }
         return HighlightDetail(row.id, row.title, owner, stories)
     }
 

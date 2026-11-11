@@ -76,6 +76,7 @@ import com.salmansaadiq.dheu.ui.icons.Lucide
 import com.salmansaadiq.dheu.ui.nav.LocalNav
 import com.salmansaadiq.dheu.ui.nav.StoryRoute
 import com.salmansaadiq.dheu.ui.rememberLoader
+import com.salmansaadiq.dheu.ui.theme.CloseFriendsGreen
 import com.salmansaadiq.dheu.ui.theme.Dheu
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -240,6 +241,17 @@ private fun StoryPlayer(
                     Text(group.author.username, color = Color.White, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.width(8.dp))
                     Text(highlight?.title ?: timeAgo(story.createdAt), color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp, maxLines = 1)
+                    if (story.closeFriends) {
+                        Spacer(Modifier.width(8.dp))
+                        Row(
+                            Modifier.clip(RoundedCornerShape(50)).background(CloseFriendsGreen).padding(horizontal = 8.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Lucide.StarFilled, null, tint = Color.White, modifier = Modifier.size(11.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Close friends", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        }
+                    }
                 }
                 IconButton(onClick = onClose) { Icon(Lucide.X, "Close", tint = Color.White) }
             }
