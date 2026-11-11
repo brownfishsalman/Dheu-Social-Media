@@ -38,8 +38,8 @@
 | **Photos** | Resized to 1080 px on the device before upload. HEIC files become JPEGs, EXIF orientation is applied, and GPS and other metadata are stripped. |
 | **Accounts** | Email and password. Sign-up needs an invite code; members create single-use codes for friends and share them from Settings. The first account becomes the admin. Members can delete their own account, with their password, and everything they shared goes with it. Light, dark or system theme, and the website installs as a home-screen app (PWA). |
 | **Reports** | Any post, story, comment or account can be reported with a reason and a note. Only the admin sees reports, in a queue where they can remove the content, suspend the member, or dismiss it, and they get a push for each new one. |
-| **Admin** | Invite codes with use limits and expiry, suspending members, resetting passwords, deleting accounts, the reports queue, content moderation, curating suggestions, announcements, and an overview of storage use. |
-| **Housekeeping** | A nightly job deletes expired posts, stories, chat photos, opened view-once photos and old notifications along with their files. |
+| **Admin** | Invite codes with use limits and expiry, suspending members, resetting passwords, deleting accounts, the reports queue, crash reports from the app, content moderation, curating suggestions, announcements, and an overview of storage use. |
+| **Housekeeping** | A nightly job deletes expired posts, stories, chat photos, opened view-once photos, old notifications and crash reports, along with their files. |
 
 ## Screenshots
 
@@ -68,9 +68,9 @@
 
 [`android/`](android) holds a native Android app written in Kotlin with Jetpack Compose. It uses the same Supabase project and the same Row Level Security rules as the website, so a member can move between the two and see the same feed, chats and notifications. It runs on Android 9 and newer.
 
-Version 0.2.0 does everything a member can do on the website: the feed with suggestions, posts, profiles with highlights, stories, Activity, Messages with notes, voice messages and group chats you can start and manage, @mentions, and push notifications. Only the admin tools stay on the website.
+The app does everything a member can do on the website: the feed with suggestions, posts, profiles with highlights, stories (close friends too), Activity, Messages with notes, voice messages and group chats you can start and manage, @mentions, reports, and push notifications. Only the admin tools stay on the website. From 0.3.0 it tells you when a newer version is out, and if it crashes it sends the details to the admin the next time it opens.
 
-To try it, download the APK from the [latest release](https://github.com/brownfishsalman/Dheu-Social-Media/releases/latest) on your phone and open it. If you have 0.1.0, uninstall it first: 0.2.0 is signed with a new key, and you only need to log in again. Android will ask you to allow your browser to install apps; allow it for this one install. Build steps, release signing and a tour of the code are in [android/README.md](android/README.md).
+To try it, download the APK from the [latest release](https://github.com/brownfishsalman/Dheu-Social-Media/releases/latest) on your phone and open it. If you have 0.1.0, uninstall it first: later versions are signed with a new key, and you only need to log in again. Android will ask you to allow your browser to install apps; allow it for this one install. Build steps, release signing and a tour of the code are in [android/README.md](android/README.md).
 
 ## How it works
 
@@ -149,7 +149,8 @@ Vercel's functions are pinned to the database's region (`vercel.json`), which on
 - Website: Next.js 16 (App Router, Turbopack, server actions, `proxy.ts` for session refresh), React 19 and strict TypeScript. The `Database` type is generated from the schema, so every query is type-checked.
 - Styling: Tailwind CSS 4 with a small set of tokens, light and dark themes, Inter and Outfit.
 - Android: Kotlin, Jetpack Compose with Material 3, Navigation Compose, supabase-kt over Ktor and OkHttp, Coil for images, kotlinx.serialization, Firebase Cloud Messaging.
-- Supabase: Postgres (with `pg_net` webhooks and Vault), Auth, Storage and Realtime. The schema, policies and triggers are in [`supabase/migrations`](supabase/migrations).
+- Supabase: Postgres (with `pg_net` webhooks and Vault), Auth, Storage and Realtime. The schema, policies and triggers are in [`supabase/migrations`](supabase/migrations), and [`supabase/tests`](supabase/tests) checks the access rules on GitHub against a throwaway database built from them.
+- CI on GitHub Actions: type-check, lint and build the website; build the Android app; build the database and run the access-rule tests.
 - Vercel for hosting and cron, with functions pinned to the database's region.
 - web-push (VAPID) for browser notifications and Firebase Cloud Messaging for the app, zod for input validation, lucide-react icons, heic-to for HEIC decoding.
 

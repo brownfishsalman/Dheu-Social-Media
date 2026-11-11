@@ -8,6 +8,7 @@ import coil3.disk.DiskCache
 import coil3.disk.directory
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.crossfade
+import com.salmansaadiq.dheu.data.CrashReports
 import com.salmansaadiq.dheu.data.LiveConnection
 import com.salmansaadiq.dheu.data.Push
 import com.salmansaadiq.dheu.data.StorageImageFetcher
@@ -17,6 +18,8 @@ import com.salmansaadiq.dheu.push.Notifications
 class DheuApp : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
+        // First, so a crash anywhere after this is written down (data/CrashReports.kt).
+        CrashReports.install(this)
         LiveConnection.install()
         Push.init(this)
         Notifications.createChannels(this)

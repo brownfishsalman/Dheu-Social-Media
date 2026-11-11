@@ -64,6 +64,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.salmansaadiq.dheu.data.Backend
+import com.salmansaadiq.dheu.data.CrashReports
 import com.salmansaadiq.dheu.data.Push
 import com.salmansaadiq.dheu.data.PushPrefs
 import com.salmansaadiq.dheu.ui.AppState
@@ -333,11 +334,13 @@ private fun MainNav() {
     var barHeight by remember { mutableStateOf(navBarInset + 81.dp) }
 
     PushSetup()
+    val context = LocalContext.current
+    // Crash reports saved on earlier runs go to the admin, now that we're signed in (0026).
+    LaunchedEffect(app.userId) { runCatching { CrashReports.sendWaiting(context.applicationContext, app.userId) } }
     // A tapped notification: open its screen on top of wherever the app is.
     val link by DeepLinks.pending.collectAsStateWithLifecycle()
     // (Waits for the first screen: on a cold start the NavHost isn't set up yet.)
     val ready = entry != null
-    val context = LocalContext.current
     LaunchedEffect(link, ready) {
         if (link == null || !ready) return@LaunchedEffect
         val url = DeepLinks.consume() ?: return@LaunchedEffect

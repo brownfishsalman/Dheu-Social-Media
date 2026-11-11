@@ -38,6 +38,41 @@ object SuggestionPrefs {
     }
 }
 
+/**
+ * The "new version" banner: when GitHub was last asked, the latest release it
+ * named (so the banner stays up between checks), and the version whose banner
+ * was closed.
+ */
+object UpdatePrefs {
+    private val CHECKED_AT = longPreferencesKey("update_checked_at")
+    private val LATEST_VERSION = stringPreferencesKey("update_latest_version")
+    private val LATEST_URL = stringPreferencesKey("update_latest_url")
+    private val DISMISSED = stringPreferencesKey("update_dismissed_version")
+
+    suspend fun checkedAt(context: Context): Long = context.settings.data.first()[CHECKED_AT] ?: 0L
+
+    suspend fun saveLatest(context: Context, version: String, url: String) {
+        context.settings.edit {
+            it[CHECKED_AT] = System.currentTimeMillis()
+            it[LATEST_VERSION] = version
+            it[LATEST_URL] = url
+        }
+    }
+
+    suspend fun latest(context: Context): Pair<String, String>? {
+        val prefs = context.settings.data.first()
+        val version = prefs[LATEST_VERSION] ?: return null
+        val url = prefs[LATEST_URL] ?: return null
+        return version to url
+    }
+
+    suspend fun dismissed(context: Context): String? = context.settings.data.first()[DISMISSED]
+
+    suspend fun dismiss(context: Context, version: String) {
+        context.settings.edit { it[DISMISSED] = version }
+    }
+}
+
 /** Push notifications on this phone: on unless switched off in Settings; the permission is asked for once. */
 object PushPrefs {
     private val ENABLED = booleanPreferencesKey("push_enabled")

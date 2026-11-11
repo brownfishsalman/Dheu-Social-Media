@@ -123,5 +123,10 @@ export async function GET(request: Request) {
   const { error: nErr } = await admin.from("notifications").delete().lt("created_at", cutoff);
   if (nErr) report.errors.push(`notifications: ${nErr.message}`);
 
+  // ---- app crash reports after 90 days (0026) ------------------------------
+  const crashCutoff = new Date(Date.now() - 90 * 86_400_000).toISOString();
+  const { error: crErr } = await admin.from("app_crashes").delete().lt("created_at", crashCutoff);
+  if (crErr) report.errors.push(`crash reports: ${crErr.message}`);
+
   return NextResponse.json({ ok: report.errors.length === 0, ranAt: now, ...report });
 }

@@ -1,0 +1,52 @@
+name: Database
+
+# Builds a throwaway Supabase database from every migration, then runs the
+# access-rule tests in supabase/tests against it as different members. It
+# never touches the live project: no secrets, nothing to connect to.
+on:
+  push:
+    branches: [main]
+    paths:
+      - supabase/**
+      - .github/workflows/database.yml
+  pull_request:
+    paths:
+      - supabase/**
+      - .github/workflows/database.yml
+  workflow_dispatch:
+
+concurrency:
+  group: database-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Migrations and access rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # Starts Postgres with Supabase's auth and storage schemas, then applies
+      # supabase/migrations in order. A migration that fails stops the job here.
+      - name: Build the database from the migrations
+        run: supabase db start
+
+      # Each file sets up its own members and content, checks what each can
+      # see or do, and rolls back; a failed check stops the job with a list.
+      - name: Run the access-rule tests
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: |
+          for f in supabase/tests/*.sql; do
+            echo "::group::$f"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$f"
+            echo "::endgroup::"
+          done

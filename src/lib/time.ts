@@ -26,6 +26,11 @@ export function formatDateTime(iso: string): string {
   });
 }
 
+// The moment `days` days ago, as an ISO string (for "since" filters in queries).
+export function daysAgo(days: number, now = Date.now()): string {
+  return new Date(now - days * 86_400_000).toISOString();
+}
+
 // "Expires in 12 days" / "Expires in 3 hours"
 export function expiresIn(iso: string, now = Date.now()): string {
   const ms = new Date(iso).getTime() - now;

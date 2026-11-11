@@ -55,6 +55,7 @@ Useful commands:
    - `supabase/migrations/0023_chat_extras.sql` (reactions, typing, view-once photos, "Seen" in the inbox; run before deploying the code that uses it)
    - `supabase/migrations/0024_posts_stories_extras.sql` (close friends stories, saved posts, comment replies and likes; run before deploying the code that uses it)
    - `supabase/migrations/0025_safety_privacy.sql` (reports, the block check out of the API's reach, photo access rules; run before deploying the code that uses it)
+   - `supabase/migrations/0026_app_crashes.sql` (crash reports from the Android app; the site's Admin → Crashes page needs it)
    (0016–0020 must run before deploying the code that uses them.)
    Never add the `private` schema (made by 0024) to the API's exposed schemas: it holds checks that members must not be able to call.
 2. **Turn off "Confirm email"** – Supabase → Authentication → Sign In / Providers → Email → untick _Confirm email_. (Accounts are created by the app with the invite code, so no confirmation email is needed. The free tier can't send emails to arbitrary addresses anyway.)
@@ -104,7 +105,8 @@ Everything is under **Settings → Open admin panel** (only visible to the admin
 - **Announcements** – Messages → *Dheu announcements* (pinned at the top of everyone's inbox). Only you can post there; members get an unread badge and see it instantly. Use it for new features, downtime notices, house rules.
 - **Content** – see all active stories and recent posts; delete anything. You can also delete any post from the "…" menu on the post itself.
 - **Reports** – what members reported (a post, story, comment or account), one card per thing with every reason given. Remove it, suspend the member, mark it handled, or dismiss it; closed reports stay listed with who closed them. You get a push for each new report.
-- **Overview** – open reports, member count, storage used vs. the free 1 GB, etc.
+- **Crashes** – when the Android app crashes, it sends the details the next time that member opens it: the error and where in the code it happened, the app and Android versions and the phone model. They're grouped by where they happened, most frequent first; open one for the full stack trace. Reports are deleted after 90 days.
+- **Overview** – open reports, app crashes this week, member count, storage used vs. the free 1 GB, etc.
 - **Deleted accounts** – members can delete their own account (Settings → Delete account, password needed). It removes their files and everything they posted, like deleting a member here. The admin account can't delete itself.
 
 ### Making photos private (once members have updated)
@@ -115,6 +117,20 @@ Photos used to be readable by anyone who had a photo's link. Since 0025, the web
 2. Check the website and the app still show photos. Anyone on the old app will see blank photos until they update.
 
 To undo, tick **Public bucket** again (or run the same statement with `public = true`).
+
+### Releasing a new version of the Android app
+
+From 0.3.0, the app checks GitHub for a newer release twice a day and shows "Dheu x.y.z is out" at the top of the feed, with a button that downloads the APK.
+
+1. Raise `versionCode` and `versionName` in `android/app/build.gradle.kts` (0.3.0 is already set).
+2. Build and sign as in [android/README.md](../android/README.md#release-builds), with your own release key, which never leaves your computer.
+3. On GitHub → Releases → **Draft a new release**: tag `v` + the version name (for example `v0.3.0`), attach the signed APK, paste the notes, publish. The banner looks for exactly that tag and an attached `.apk`.
+
+0.2.0 doesn't have the banner yet, so for 0.3.0 itself, tell members in **Dheu announcements** that there's an update. Phones with one of the test builds (signed with the development key) need to uninstall it once before installing the release.
+
+### Database tests
+
+Every push that changes `supabase/` runs the **Database** workflow on GitHub: it builds a throwaway database from all the migrations and runs the access-rule tests in `supabase/tests` against it, as different members (who can see a private post, a close friends story, a chat photo, a report…). It never connects to the live project. When you change a migration or add one, a red run means a rule no longer does what the tests expect.
 
 ---
 
@@ -151,6 +167,7 @@ src/lib/data/          server-side data queries (Supabase)
 src/lib/supabase/      Supabase clients (browser, server, admin) + session refresh (proxy)
 src/lib/images.ts      browser-side resize / HEIC conversion / metadata stripping
 supabase/migrations/   database schema, security rules (RLS), storage buckets
+supabase/tests/        access-rule tests, run on GitHub against a throwaway database
 scripts/build-logo.mjs regenerates public/brand + app icons from the original logo PNGs
 ```
 

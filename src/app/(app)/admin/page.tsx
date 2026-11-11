@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { POST_LIFETIME_LABEL } from "@/lib/constants";
+import { daysAgo } from "@/lib/time";
 
 export const metadata: Metadata = { title: "Admin" };
 
@@ -26,9 +27,11 @@ function fmtBytes(n: number) {
 
 export default async function AdminOverviewPage() {
   const admin = createAdminClient();
-  const [{ data, error }, { count: openReports }] = await Promise.all([
+  const weekAgo = daysAgo(7);
+  const [{ data, error }, { count: openReports }, { count: crashes }] = await Promise.all([
     admin.rpc("admin_stats"),
     admin.from("reports").select("id", { count: "exact", head: true }).eq("status", "open"),
+    admin.from("app_crashes").select("id", { count: "exact", head: true }).gte("happened_at", weekAgo),
   ]);
   if (error || !data) {
     return (
@@ -43,6 +46,7 @@ export default async function AdminOverviewPage() {
 
   const tiles: { label: string; value: number | string; href?: string }[] = [
     { label: "Open reports", value: openReports ?? 0, href: "/admin/reports" },
+    { label: "App crashes (7 days)", value: crashes ?? 0, href: "/admin/crashes" },
     { label: "Members", value: s.members, href: "/admin/members" },
     { label: "Suspended", value: s.banned, href: "/admin/members" },
     { label: "Live posts", value: s.live_posts, href: "/admin/content" },

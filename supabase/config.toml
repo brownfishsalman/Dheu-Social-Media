@@ -1,0 +1,10 @@
+# Supabase CLI settings. Used only by the "Database" CI workflow
+# (.github/workflows/database.yml), which builds a throwaway local database
+# from supabase/migrations and runs supabase/tests against it. The live
+# project is configured in the Supabase dashboard; nothing here touches it.
+project_id = "dheu"
+
+[db]
+port = 54322
+# Same major version as the live project.
+major_version = 17

@@ -47,12 +47,14 @@ android {
         applicationId = "com.salmansaadiq.dheu"
         minSdk = 28
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
 
         buildConfigField("String", "SUPABASE_URL", "\"${setting("dheu.supabaseUrl")}\"")
         buildConfigField("String", "SUPABASE_KEY", "\"${setting("dheu.supabaseKey")}\"")
         buildConfigField("String", "SITE_URL", "\"${setting("dheu.siteUrl").ifEmpty { "https://dheu-beige.vercel.app" }}\"")
+        // Where releases are published: the "new version" banner asks its latest release.
+        buildConfigField("String", "RELEASES_REPO", "\"${setting("dheu.releasesRepo").ifEmpty { "brownfishsalman/Dheu-Social-Media" }}\"")
         buildConfigField("String", "FIREBASE_APP_ID", "\"${firebase["appId"].orEmpty()}\"")
         buildConfigField("String", "FIREBASE_API_KEY", "\"${firebase["apiKey"].orEmpty()}\"")
         buildConfigField("String", "FIREBASE_PROJECT_ID", "\"${firebase["projectId"].orEmpty()}\"")

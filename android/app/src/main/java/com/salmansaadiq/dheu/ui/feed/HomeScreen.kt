@@ -1,5 +1,6 @@
 package com.salmansaadiq.dheu.ui.feed
 
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -28,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -47,6 +49,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
@@ -60,6 +63,7 @@ import com.salmansaadiq.dheu.data.Profiles
 import com.salmansaadiq.dheu.data.Stories
 import com.salmansaadiq.dheu.data.StoryGroup
 import com.salmansaadiq.dheu.data.SuggestionPrefs
+import com.salmansaadiq.dheu.data.Updates
 import com.salmansaadiq.dheu.data.friendly
 import com.salmansaadiq.dheu.ui.LocalAppState
 import com.salmansaadiq.dheu.ui.auth.Wordmark
@@ -199,6 +203,7 @@ fun HomeScreen() {
             colors = TopAppBarDefaults.topAppBarColors(containerColor = c.surface),
         )
         HorizontalDivider(color = c.line)
+        UpdateBanner()
 
         when {
             vm.loading && vm.posts.isEmpty() -> Loading()
@@ -240,6 +245,40 @@ fun HomeScreen() {
             }
         }
     }
+}
+
+/**
+ * "Dheu 0.4.0 is out": the newest release on GitHub (data/Updates.kt), until
+ * it's installed or this banner is closed for that version. Update opens the
+ * APK in the browser, which downloads it.
+ */
+@Composable
+private fun UpdateBanner() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val c = Dheu.colors
+    var available by remember { mutableStateOf<Updates.Available?>(null) }
+    LaunchedEffect(Unit) { available = runCatching { Updates.check(context.applicationContext) }.getOrNull() }
+    val update = available ?: return
+    Row(
+        Modifier.fillMaxWidth().background(c.brandSoft).padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Lucide.Download, null, tint = c.brandStrong, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(10.dp))
+        Text("Dheu ${update.version} is out", color = c.ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        TextButton(onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, update.url.toUri())) } }) {
+            Text("Update", color = c.brand, fontWeight = FontWeight.SemiBold)
+        }
+        IconButton(
+            onClick = {
+                available = null
+                scope.launch { Updates.dismiss(context.applicationContext, update.version) }
+            },
+            modifier = Modifier.size(36.dp),
+        ) { Icon(Lucide.X, "Not now", tint = c.inkMuted, modifier = Modifier.size(16.dp)) }
+    }
+    HorizontalDivider(color = c.line)
 }
 
 /** Story rings across the top of the feed: mine first (add or view), then everyone else's. */

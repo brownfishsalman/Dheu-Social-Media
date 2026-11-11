@@ -66,6 +66,56 @@ export type Database = {
           },
         ]
       }
+      app_crashes: {
+        Row: {
+          android: string
+          app_version: string
+          created_at: string
+          device: string
+          exception: string
+          happened_at: string
+          id: string
+          stack: string
+          thread: string
+          user_id: string | null
+          version_code: number
+        }
+        Insert: {
+          android?: string
+          app_version: string
+          created_at?: string
+          device?: string
+          exception: string
+          happened_at: string
+          id?: string
+          stack: string
+          thread?: string
+          user_id?: string | null
+          version_code: number
+        }
+        Update: {
+          android?: string
+          app_version?: string
+          created_at?: string
+          device?: string
+          exception?: string
+          happened_at?: string
+          id?: string
+          stack?: string
+          thread?: string
+          user_id?: string | null
+          version_code?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_crashes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       blocks: {
         Row: {
           blocked_id: string

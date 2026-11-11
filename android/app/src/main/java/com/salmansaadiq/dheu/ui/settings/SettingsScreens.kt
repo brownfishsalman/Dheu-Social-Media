@@ -128,6 +128,7 @@ fun SettingsScreen() {
     var confirmPrivacy by remember { mutableStateOf(false) }
     var savingPrivacy by remember { mutableStateOf(false) }
     var confirmLogout by remember { mutableStateOf(false) }
+    var confirmTestCrash by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().background(c.canvas)) {
         DheuTopBar("Settings", onBack = nav::back)
@@ -183,10 +184,18 @@ fun SettingsScreen() {
             }
 
             if (profile.isAdmin) {
-                Card("Admin", "Invite codes, members, moderation and announcements live on the website.") {
+                Card("Admin", "Invite codes, members, moderation, reports and crashes live on the website.") {
                     SecondaryButton("Open the admin panel", {
                         context.startActivity(Intent(Intent.ACTION_VIEW, "${BuildConfig.SITE_URL}/admin".toUri()))
                     }, icon = Lucide.ShieldCheck)
+                    // Proves crash reporting works end to end: the report shows up in Admin → Crashes
+                    // once the app is opened again (data/CrashReports.kt).
+                    Text(
+                        "Test crash reporting",
+                        color = c.inkMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 12.dp).clip(RoundedCornerShape(6.dp)).clickable { confirmTestCrash = true }.padding(4.dp),
+                    )
                 }
             }
 
@@ -230,6 +239,15 @@ fun SettingsScreen() {
         ConfirmDialog("Log out?", "You'll need your email and password to log back in.", "Log out", onConfirm = {
             scope.launch { runCatching { Account.signOut() } }
         }, onDismiss = { confirmLogout = false })
+    }
+    if (confirmTestCrash) {
+        ConfirmDialog(
+            "Crash the app on purpose?",
+            "The app closes. Open it again and the report shows up in Admin → Crashes on the website.",
+            "Crash it",
+            onConfirm = { throw IllegalStateException("Test crash from Settings (crash reporting check)") },
+            onDismiss = { confirmTestCrash = false },
+        )
     }
 }
 
