@@ -4,23 +4,25 @@ The native Android app for [Dheu](../README.md), written in Kotlin with Jetpack 
 
 It runs on Android 9 (API 28) and newer. Test builds are on the [Releases page](https://github.com/brownfishsalman/Dheu-Social-Media/releases).
 
-## What's in 0.2.0
+## What's in 0.3.0
 
 Everything a member can do on the website, except the admin panel, which stays there.
 
 - Sign-up with an invite code and a public or private account, sign-in, and the privacy choice for older accounts that never made one.
-- The home feed with stories and, now and then, "Suggested for you". Posts with swipeable photos, double-tap likes, comments and a likers list, and sharing a new post of up to 10 photos.
-- Profiles with follow, unfollow, follow requests, follower lists, blocking, search, and highlights: view them, make one from your stories, add a story to one from the story itself, remove a story or delete a highlight.
-- Stories you can view, post, react to, reply to and check who has seen.
+- The home feed with stories and, now and then, "Suggested for you". Posts with swipeable photos, double-tap likes, comments with replies and likes, a likers list, a bookmark that keeps a post in your Saved tab, saving your own posts' photos to the phone, and sharing a new post of up to 10 photos.
+- Profiles with follow, unfollow, follow requests, follower lists, blocking, search, a Saved tab only you can see, and highlights: view them, make one from your stories, add a story to one from the story itself, remove a story or delete a highlight.
+- Stories you can view, post to everyone or to your close friends, react to, reply to and check who has seen.
 - Activity with follow requests to accept or decline.
-- Messages with notes, 1-to-1 and group chats, photos, voice messages (record up to 2 minutes), swipe-to-reply, unsend, delete chat for yourself, and the announcements thread. Groups: start one, rename it, add people, remove people (the owner) and leave.
+- Messages with notes, 1-to-1 and group chats, photos (view-once too), voice messages (record up to 2 minutes), reactions, typing and "Seen", swipe-to-reply, unsend, delete chat for yourself, and the announcements thread. Groups: start one, rename it, add people, remove people (the owner) and leave.
 - @mentions in captions, comments and group chats, with suggestions as you type. The person mentioned gets an Activity entry and a notification.
+- Reporting a post, story, comment or account to the admin.
 - Push notifications for messages, mentions, comments, likes, follows and announcements, with a switch in Settings.
-- Settings for your profile, account type, notifications, theme, password, blocked accounts and invite codes.
+- Settings for your profile, account type, close friends, read receipts, notifications, theme, password, blocked accounts, invite codes and deleting your account.
+- A banner on the feed when a newer version is out, and crash reports that reach the admin the next time the app opens.
 
 Screens slide in from the right and back out, and the back gesture drags the page with your finger, as on Instagram. Stories and highlights fade in and out.
 
-0.2.0 is signed with a new release key (the first one was lost), so it won't install over 0.1.0: uninstall 0.1.0 first. Nothing is lost, since everything lives on the server; you just log in again.
+0.3.0 is signed with a new release key, as 0.2.0 was before it (see [Release builds](#release-builds)), so it won't install over an older version: uninstall the app first. Nothing is lost, since everything lives on the server; you just log in again.
 
 ## Building
 
@@ -65,14 +67,14 @@ Create a signing key once, outside the repo. Back up the `.jks` file and its pas
 keytool -genkeypair -v -keystore dheu-release.jks -alias dheu -keyalg RSA -keysize 4096 -validity 10000
 ```
 
-If the key is ever lost, the next build has to be signed with a new one, and every tester has to uninstall the old app once before installing it. That happened between 0.1.0 and 0.2.0.
+If the key or its password is ever lost, the next build has to be signed with a new one, and everyone has to uninstall the old app once before installing it. That happened between 0.1.0 and 0.2.0 (the key was lost) and between 0.2.0 and 0.3.0 (its password was forgotten). Keep the password in a password manager, and a copy of the `.jks` somewhere other than this computer.
 
 Build, sign with `apksigner` from the SDK's `build-tools` folder (it asks for the password), and check the result:
 
 ```bash
 ./gradlew assembleRelease
-apksigner sign --ks dheu-release.jks --ks-key-alias dheu --out Dheu-0.2.0.apk app/build/outputs/apk/release/app-release-unsigned.apk
-apksigner verify --print-certs Dheu-0.2.0.apk
+apksigner sign --ks dheu-release.jks --ks-key-alias dheu --out Dheu-0.3.0.apk app/build/outputs/apk/release/app-release-unsigned.apk
+apksigner verify --print-certs Dheu-0.3.0.apk
 ```
 
 Raise `versionCode` and `versionName` in `app/build.gradle.kts` before each release. Google Play takes an app bundle (`./gradlew bundleRelease`) rather than an APK; with Play App Signing, the key above becomes your upload key.

@@ -70,7 +70,7 @@
 
 The app does everything a member can do on the website: the feed with suggestions, posts, profiles with highlights, stories (close friends too), Activity, Messages with notes, voice messages and group chats you can start and manage, @mentions, reports, and push notifications. Only the admin tools stay on the website. From 0.3.0 it tells you when a newer version is out, and if it crashes it sends the details to the admin the next time it opens.
 
-To try it, download the APK from the [latest release](https://github.com/brownfishsalman/Dheu-Social-Media/releases/latest) on your phone and open it. If you have 0.1.0, uninstall it first: later versions are signed with a new key, and you only need to log in again. Android will ask you to allow your browser to install apps; allow it for this one install. Build steps, release signing and a tour of the code are in [android/README.md](android/README.md).
+To try it, download the APK from the [latest release](https://github.com/brownfishsalman/Dheu-Social-Media/releases/latest) on your phone and open it. If you have 0.1.0 or 0.2.0, uninstall it first: 0.3.0 is signed with a new key, and you only need to log in again. Android will ask you to allow your browser to install apps; allow it for this one install. Build steps, release signing and a tour of the code are in [android/README.md](android/README.md).
 
 ## How it works
 
