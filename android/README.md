@@ -8,7 +8,7 @@ It runs on Android 9 (API 28) and newer. Test builds are on the [Releases page](
 
 Everything a member can do on the website, except the admin panel, which stays there.
 
-- Sign-up with an invite code and a public or private account, sign-in, and the privacy choice for older accounts that never made one.
+- Sign-up with a public or private account (and an invite code while the admin has made sign-up invite-only), sign-in, and the privacy choice for older accounts that never made one.
 - The home feed with stories and, now and then, "Suggested for you". Posts with swipeable photos, double-tap likes, comments with replies and likes, a likers list, a bookmark that keeps a post in your Saved tab, saving your own posts' photos to the phone, and sharing a new post of up to 10 photos from the + at the top of Home.
 - Find friends, the flame tab: make a swipe profile (1 to 6 photos, a bio, an optional age and up to five interests), then swipe right to like or left to pass, with one undo. A mutual like is a match, with an "It's a match" screen and a chat in Messages; a matches list lets you unmatch or report. Once you've seen everyone, the people you passed on come back.
 - Profiles with follow, unfollow, follow requests, follower lists, blocking, search, a Saved tab only you can see, and highlights: view them, make one from your stories, add a story to one from the story itself, remove a story or delete a highlight.
@@ -18,7 +18,7 @@ Everything a member can do on the website, except the admin panel, which stays t
 - @mentions in captions, comments and group chats, with suggestions as you type. The person mentioned gets an Activity entry and a notification.
 - Reporting a post, story, comment or account to the admin.
 - Push notifications for messages, mentions, comments, likes, follows and announcements, with a switch in Settings.
-- Settings for your profile, account type, close friends, read receipts, notifications, theme, password, blocked accounts, invite codes and deleting your account.
+- Settings for your profile, account type, close friends, read receipts, notifications, theme, password, blocked accounts, sharing Dheu with friends (the sign-up link, or invite codes while sign-up is invite-only) and deleting your account.
 - A banner on the feed when a newer version is out, and crash reports that reach the admin the next time the app opens.
 
 Screens slide in from the right and back out, and the back gesture drags the page with your finger, as on Instagram. Stories and highlights fade in and out.

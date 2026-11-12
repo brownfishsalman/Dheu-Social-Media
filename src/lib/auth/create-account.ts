@@ -1,8 +1,12 @@
 import "server-only";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isInviteOnly } from "@/lib/signup-settings";
 
 const USERNAME_RE = /^[a-z0-9_.]{3,30}$/;
+
+// The app shows the invite field when it gets this back (older versions just show the message).
+export const INVITE_REQUIRED = "An invite code is required to join.";
 
 export const signupSchema = z.object({
   fullName: z.string().trim().min(1, "Enter your name").max(60, "Name is too long"),
@@ -13,16 +17,18 @@ export const signupSchema = z.object({
     .regex(USERNAME_RE, "3–30 characters: letters, numbers, dots or underscores"),
   email: z.email("Enter a valid email address"),
   password: z.string().min(8, "Use at least 8 characters").max(72, "Password is too long"),
-  inviteCode: z.string().trim().toUpperCase(),
+  // Only needed while sign-up is invite-only (0028); otherwise ignored.
+  inviteCode: z.string().trim().toUpperCase().default(""),
   accountType: z.enum(["public", "private"], { error: "Choose a public or private account" }),
 });
 
 export type SignupInput = z.infer<typeof signupSchema>;
 export type CreateAccountResult = { ok: true } | { ok: false; error: string };
 
-// Invite-gated account creation with the secret key, shared by the website's
-// sign-up form and the Android app (POST /api/auth/signup). It does not sign
-// the person in; each caller does that its own way.
+// Account creation with the secret key, shared by the website's sign-up form
+// and the Android app (POST /api/auth/signup). Open to anyone, unless the
+// admin has made sign-up invite-only (0028). It does not sign the person in;
+// each caller does that its own way.
 export async function createAccount(input: SignupInput): Promise<CreateAccountResult> {
   const { fullName, username, email, password, inviteCode, accountType } = input;
   const admin = createAdminClient();
@@ -34,14 +40,16 @@ export async function createAccount(input: SignupInput): Promise<CreateAccountRe
     return { ok: false, error: `Couldn't reach the database (${countError.message}). Please try again.` };
   }
   const isFirstUser = (count ?? 0) === 0;
+  const needsInvite = !isFirstUser && (await isInviteOnly());
 
-  if (!isFirstUser && !inviteCode) return { ok: false, error: "An invite code is required to join." };
+  if (needsInvite && !inviteCode) return { ok: false, error: INVITE_REQUIRED };
 
   const { data: taken } = await admin.from("profiles").select("id").eq("username", username).maybeSingle();
   if (taken) return { ok: false, error: "That username is already taken." };
 
+  // While sign-up is open, a code someone brings along is simply not used.
   let inviteCodeId: string | null = null;
-  if (!isFirstUser) {
+  if (needsInvite) {
     const { data, error } = await admin.rpc("claim_invite_code", { p_code: inviteCode });
     if (error || !data) {
       const reason = error?.message ?? "";

@@ -4,6 +4,7 @@ import { ChevronRight, LogOut, Shield, Star } from "lucide-react";
 import { requireProfile } from "@/lib/data/session";
 import { getBlockedProfiles } from "@/lib/data/profiles";
 import { getSiteUrl } from "@/lib/site-url";
+import { isInviteOnly } from "@/lib/signup-settings";
 import { createClient } from "@/lib/supabase/server";
 import { MEMBER_INVITE_LIMIT, POST_LIFETIME_LABEL } from "@/lib/constants";
 import { ShareWithFriends } from "@/components/settings/ShareWithFriends";
@@ -21,11 +22,12 @@ export const metadata: Metadata = { title: "Settings" };
 export default async function SettingsPage() {
   const profile = await requireProfile();
   const supabase = await createClient();
-  const [siteUrl, blocked, { data: myCodes }, { count: closeFriends }] = await Promise.all([
+  const [siteUrl, blocked, { data: myCodes }, { count: closeFriends }, inviteOnly] = await Promise.all([
     getSiteUrl(),
     getBlockedProfiles(profile.id),
     supabase.from("invite_codes").select("*").eq("created_by", profile.id).order("created_at", { ascending: false }),
     supabase.from("close_friends").select("friend_id", { count: "exact", head: true }).eq("owner_id", profile.id),
+    isInviteOnly(),
   ]);
 
   return (
@@ -67,7 +69,7 @@ export default async function SettingsPage() {
 
         <section className="card p-5">
           <h2 className="mb-1 font-display text-lg font-semibold">Share with friends</h2>
-          <ShareWithFriends codes={myCodes ?? []} siteUrl={siteUrl} limit={MEMBER_INVITE_LIMIT} />
+          <ShareWithFriends codes={myCodes ?? []} siteUrl={siteUrl} limit={MEMBER_INVITE_LIMIT} inviteOnly={inviteOnly} />
         </section>
 
         <section className="card p-5">

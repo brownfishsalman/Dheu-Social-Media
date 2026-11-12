@@ -6,6 +6,7 @@ import { requireProfile } from "@/lib/data/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { postImageFiles } from "@/lib/storage";
 import { removeUserFiles } from "@/lib/account";
+import { setInviteOnly } from "@/lib/signup-settings";
 
 export type ActionResult = { ok: true; message?: string; secret?: string } | { ok: false; error: string };
 
@@ -90,6 +91,16 @@ export async function createInvite(_prev: ActionResult | null, formData: FormDat
     if (error.code !== "23505") return { ok: false, error: error.message };
   }
   return { ok: false, error: "Couldn't generate a unique code. Try again." };
+}
+
+// Open sign-up, or invite codes only (0028).
+export async function setSignupInviteOnly(inviteOnly: boolean): Promise<ActionResult> {
+  const me = await assertAdmin();
+  const { error } = await setInviteOnly(inviteOnly, me.id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/admin/invites");
+  revalidatePath("/settings");
+  return { ok: true };
 }
 
 export async function setInviteDisabled(id: string, disabled: boolean): Promise<ActionResult> {

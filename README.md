@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="docs/screenshots/hero.png" alt="Dheu, a small invite-only photo community" width="100%" />
+  <img src="docs/screenshots/hero.png" alt="Dheu, a small photo community" width="100%" />
 </p>
 
 <h1 align="center">Dheu</h1>
 
 <p align="center">
-  An invite-only, Instagram-style photo community for a small circle of people, on the web and on Android.<br/>
+  An Instagram-style photo community for a small circle of people, on the web and on Android.<br/>
   Public or private accounts, posts that expire after 3 months, 24-hour stories and notes, real-time chat with disappearing photos<br/>and push notifications, all running on free tiers.
 </p>
 
@@ -21,7 +21,7 @@
   <img alt="License: GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-00273d?style=flat-square" />
 </p>
 
-*Dheu* means wave in Bengali. It's built for one small community that wanted the feel of early Instagram: photos from friends and nothing else, with no ads, no algorithm and no audience of strangers. You can only join with an invite code.
+*Dheu* means wave in Bengali. It's built for one small community that wanted the feel of early Instagram: photos from friends and nothing else, with no ads, no algorithm and no audience of strangers. Anyone with the link can join, and the admin can make sign-up invite-only with one switch.
 
 ## Features
 
@@ -37,9 +37,9 @@
 | **Discovery** | People search, follower lists, and a "Suggested for you" strip, chosen by the admin, that turns up in the feed now and then. |
 | **Find friends** | A swipe section (the flame tab) for meeting new people in the community. Members who want to take part make a swipe profile with 1 to 6 photos, a short bio, an optional age and up to five interests, then swipe through everyone else's: right to like, left to pass, with one undo. Likes stay secret; when two people like each other it's a match, both hear about it, and a chat opens in Messages. Once you've seen everyone, the people you passed on come back in a new order. Only members with a swipe profile can see one, never across a block, and you can pause or delete yours any time. |
 | **Photos** | Resized to 1080 px on the device before upload. HEIC files become JPEGs, EXIF orientation is applied, and GPS and other metadata are stripped. |
-| **Accounts** | Email and password. Sign-up needs an invite code; members create single-use codes for friends and share them from Settings. The first account becomes the admin. Members can delete their own account, with their password, and everything they shared goes with it. Light, dark or system theme, and the website installs as a home-screen app (PWA). |
+| **Accounts** | Email and password. Sign-up is open to anyone with the link, and members share it from Settings. The admin can switch sign-up to invite-only; then it needs an invite code, and members create single-use codes for friends instead. The first account becomes the admin. Members can delete their own account, with their password, and everything they shared goes with it. Light, dark or system theme, and the website installs as a home-screen app (PWA). |
 | **Reports** | Any post, story, comment or account can be reported with a reason and a note. Only the admin sees reports, in a queue where they can remove the content, suspend the member, or dismiss it, and they get a push for each new one. |
-| **Admin** | Invite codes with use limits and expiry, suspending members, resetting passwords, deleting accounts, the reports queue, crash reports from the app, content moderation, curating suggestions, announcements, and an overview of storage use. |
+| **Admin** | An open or invite-only switch for sign-up, invite codes with use limits and expiry, suspending members, resetting passwords, deleting accounts, the reports queue, crash reports from the app, content moderation, curating suggestions, announcements, and an overview of storage use. |
 | **Housekeeping** | A nightly job deletes expired posts, stories, chat photos, opened view-once photos, old notifications and crash reports, along with their files. |
 
 ## Screenshots
@@ -109,7 +109,7 @@ Next.js server components render pages on Vercel and query Supabase directly. Th
 
 ### Security in the database
 
-Every table has Row Level Security: 67 policies that Postgres checks against the caller's JWT. Members can change only their own rows, read only the chats they belong to, and update only the `read_at` column of their own notifications. The admin can delete anything. The browser and the APK carry only a publishable key, which grants nothing by itself. Privileged operations (invite-checked sign-up, bans, cleanup, sending push) run on the server with the secret key.
+Every table has Row Level Security: more than 80 policies that Postgres checks against the caller's JWT. Members can change only their own rows, read only the chats they belong to, and update only the `read_at` column of their own notifications. The admin can delete anything. The browser and the APK carry only a publishable key, which grants nothing by itself. Privileged operations (sign-up, with the invite check when it's switched on, bans, cleanup, sending push) run on the server with the secret key.
 
 The secret key can't ship inside an APK, because anyone can unpack one. So the app sends sign-ups to `/api/auth/signup` and asks `/api/invites` for new invite codes, and the website does the privileged part. The invite endpoint verifies the member's Supabase access token before it creates a code.
 

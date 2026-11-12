@@ -2,7 +2,7 @@
 
 How to run, deploy and look after Dheu. For an overview of the project see the [README](../README.md).
 
-A small, invite-only photo-sharing community. Still images only: public or private accounts, posts (up to 10 photos, gone after 3 months), 24-hour stories with highlights, 24-hour notes, follows, likes, comments, an activity feed (likes / follows / comments / story reactions), and 1-to-1 and group chat.
+A small photo-sharing community, open to anyone with the link or invite-only at the flip of a switch. Still images only: public or private accounts, posts (up to 10 photos, gone after 3 months), 24-hour stories with highlights, 24-hour notes, follows, likes, comments, an activity feed (likes / follows / comments / story reactions), and 1-to-1 and group chat.
 
 Built with **Next.js** (the website) and **Supabase** (database, login, image storage, realtime chat). Hosted for free on **Vercel**.
 
@@ -57,9 +57,10 @@ Useful commands:
    - `supabase/migrations/0025_safety_privacy.sql` (reports, the block check out of the API's reach, photo access rules; run before deploying the code that uses it)
    - `supabase/migrations/0026_app_crashes.sql` (crash reports from the Android app; the site's Admin → Crashes page needs it)
    - `supabase/migrations/0027_friend_swipes.sql` (Find friends: swipe profiles, likes and matches, and a private `swipe` photo bucket; run before deploying the code that uses it)
+   - `supabase/migrations/0028_signup_settings.sql` (the open or invite-only switch for sign-up, starting open; run before deploying the code that uses it)
    (0016–0020 must run before deploying the code that uses them.)
    Never add the `private` schema (made by 0024) to the API's exposed schemas: it holds checks that members must not be able to call.
-2. **Turn off "Confirm email"** – Supabase → Authentication → Sign In / Providers → Email → untick _Confirm email_. (Accounts are created by the app with the invite code, so no confirmation email is needed. The free tier can't send emails to arbitrary addresses anyway.)
+2. **Turn off "Confirm email"** – Supabase → Authentication → Sign In / Providers → Email → untick _Confirm email_. (Accounts are created by the website's server, so no confirmation email is needed. The free tier can't send emails to arbitrary addresses anyway.)
 3. **Keys** – Supabase → Project Settings → API keys. Put the URL, the _publishable_ key and the _secret_ key in `.env.local` (copy `.env.example`).
 4. **First account = admin.** The very first person to sign up doesn't need an invite code and automatically becomes the admin. Do this yourself immediately after deploying.
 
@@ -99,7 +100,8 @@ The app uses Firebase Cloud Messaging; the website does the sending.
 
 Everything is under **Settings → Open admin panel** (only visible to the admin).
 
-- **Invites** – generate a code, set how many people can use it and when it expires. Members can also make their own single-use codes (Settings → Share with friends, max 5 unused each); those appear here too, marked "by @username". The copy button gives a link like `https://dheu-beige.vercel.app/signup?code=WAVE-XXXX-XXXX` with the code pre-filled.
+- **Sign-up** – open to anyone with the link, until you make it invite-only at the top of Admin → Invites (and back again). While it's open, nobody needs a code and Settings → Share with friends shares the plain sign-up link. There's no limit on new accounts, so if fake accounts start appearing, switch it to invite-only and delete them in Members.
+- **Invites** – used while sign-up is invite-only. Generate a code, set how many people can use it and when it expires. Members can also make their own single-use codes (Settings → Share with friends, max 5 unused each); those appear here too, marked "by @username". The copy button gives a link like `https://dheu-beige.vercel.app/signup?code=WAVE-XXXX-XXXX` with the code pre-filled.
 - **Members** – suspend (blocks login instantly), reinstate, set a temporary password for someone who forgot theirs (tell them privately; they change it in Settings), or delete a member and everything they posted.
 - **Privacy** – each member chooses public or private at sign-up and can switch in Settings → Account privacy (members who joined before this existed are asked once). Public accounts are visible to every member and can be followed instantly; private accounts need an accepted follow request. Members can block each other (Settings → Blocked accounts to undo).
 - **Suggestions** – pick members to appear in the "Suggested for you" strip that shows in feeds now and then; drag order with the arrows.

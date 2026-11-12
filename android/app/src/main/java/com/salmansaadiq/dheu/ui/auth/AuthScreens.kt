@@ -27,6 +27,7 @@ import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,7 +57,7 @@ import com.salmansaadiq.dheu.ui.theme.Dheu
 import com.salmansaadiq.dheu.ui.theme.Outfit
 import kotlinx.coroutines.launch
 
-/** Logged-out flow: log in, or sign up with an invite code. */
+/** Logged-out flow: log in, or sign up (with an invite code while sign-up is invite-only). */
 @Composable
 fun AuthFlow() {
     var signingUp by rememberSaveable { mutableStateOf(false) }
@@ -150,7 +151,7 @@ private fun LoginScreen(onSignup: () -> Unit) {
             modifier = Modifier.fillMaxWidth(),
         )
         TextButton(onClick = onSignup, modifier = Modifier.fillMaxWidth()) {
-            Text("New here? Join with an invite code", color = Dheu.colors.brand, fontWeight = FontWeight.SemiBold)
+            Text("New here? Create an account", color = Dheu.colors.brand, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -168,8 +169,13 @@ private fun SignupScreen(onLogin: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    // The invite field shows only while sign-up is invite-only (0028). If the
+    // website can't be asked, it shows once the website says a code is needed.
+    var inviteOnly by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) { if (Account.inviteOnly() == true) inviteOnly = true }
 
     fun validate(): String? = when {
+        inviteOnly && invite.isBlank() -> "Enter your invite code"
         fullName.isBlank() -> "Enter your name"
         !USERNAME.matches(username.trim().lowercase()) -> "Username: 3–30 letters, numbers, dots or underscores"
         !email.contains('@') -> "Enter a valid email address"
@@ -178,8 +184,8 @@ private fun SignupScreen(onLogin: () -> Unit) {
         else -> null
     }
 
-    AuthFrame("Join with an invite code from a member.") {
-        DheuTextField(invite, { invite = it.uppercase() }, "Invite code")
+    AuthFrame(if (inviteOnly) "Join with an invite code from a member." else "Create your account and say hi.") {
+        if (inviteOnly) DheuTextField(invite, { invite = it.uppercase() }, "Invite code")
         DheuTextField(fullName, { fullName = it }, "Full name", maxLength = 60)
         DheuTextField(username, { username = it.lowercase() }, "Username", maxLength = 30, supporting = "Letters, numbers, dots or underscores")
         DheuTextField(email, { email = it }, "Email", keyboardType = KeyboardType.Email)
@@ -201,6 +207,7 @@ private fun SignupScreen(onLogin: () -> Unit) {
                         )
                     } catch (e: Exception) {
                         error = e.friendly("Could not create your account. Please try again.")
+                        if (e.message?.contains("invite code is required", ignoreCase = true) == true) inviteOnly = true
                     } finally {
                         busy = false
                     }

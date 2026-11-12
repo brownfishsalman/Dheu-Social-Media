@@ -6,28 +6,31 @@ import { signup, type AuthState } from "../actions";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { AccountTypePicker } from "@/components/settings/AccountPrivacy";
 
-export function SignupForm({ inviteCode }: { inviteCode?: string }) {
+// The invite field shows only while sign-up is invite-only (Admin → Invites).
+export function SignupForm({ inviteOnly, inviteCode }: { inviteOnly: boolean; inviteCode?: string }) {
   const [state, action] = useActionState<AuthState, FormData>(signup, {});
   const f = state.fields ?? {};
 
   return (
     <form action={action} className="space-y-3.5">
-      <div>
-        <label htmlFor="inviteCode" className="mb-1.5 block text-sm font-medium">
-          Invite code
-        </label>
-        <input
-          id="inviteCode"
-          name="inviteCode"
-          type="text"
-          autoComplete="off"
-          autoCapitalize="characters"
-          spellCheck={false}
-          className="input font-mono uppercase tracking-widest"
-          placeholder="e.g. WAVE-8K2P"
-          defaultValue={f.inviteCode ?? inviteCode ?? ""}
-        />
-      </div>
+      {inviteOnly && (
+        <div>
+          <label htmlFor="inviteCode" className="mb-1.5 block text-sm font-medium">
+            Invite code
+          </label>
+          <input
+            id="inviteCode"
+            name="inviteCode"
+            type="text"
+            autoComplete="off"
+            autoCapitalize="characters"
+            spellCheck={false}
+            className="input font-mono uppercase tracking-widest"
+            placeholder="e.g. WAVE-8K2P"
+            defaultValue={f.inviteCode ?? inviteCode ?? ""}
+          />
+        </div>
+      )}
 
       <div>
         <label htmlFor="fullName" className="mb-1.5 block text-sm font-medium">

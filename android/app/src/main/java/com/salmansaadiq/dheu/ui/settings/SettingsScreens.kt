@@ -251,8 +251,40 @@ fun SettingsScreen() {
     }
 }
 
+/**
+ * While sign-up is open (0028), friends just need the link; while it's
+ * invite-only, each needs a single-use code. Codes show if the website
+ * can't be asked which it is.
+ */
 @Composable
 private fun InvitesCard(me: String) {
+    val context = LocalContext.current
+    var inviteOnly by remember { mutableStateOf<Boolean?>(null) }
+    var asked by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        inviteOnly = Account.inviteOnly()
+        asked = true
+    }
+    when {
+        !asked -> Card("Share with friends") { Text("Loading…", color = Dheu.colors.inkFaint) }
+        inviteOnly == false -> Card("Share with friends", "Anyone with this link can create an account.") {
+            Text(Account.signupLink, color = Dheu.colors.inkMuted, style = MaterialTheme.typography.bodySmall)
+            PrimaryButton(
+                "Share the link",
+                {
+                    val text = "Join me on Dheu, a small photo community. Sign up here: ${Account.signupLink}"
+                    context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), "Share Dheu"))
+                },
+                Modifier.padding(top = 12.dp),
+                icon = Lucide.Share,
+            )
+        }
+        else -> InviteCodesCard(me)
+    }
+}
+
+@Composable
+private fun InviteCodesCard(me: String) {
     val c = Dheu.colors
     val context = LocalContext.current
     val scope = rememberCoroutineScope()

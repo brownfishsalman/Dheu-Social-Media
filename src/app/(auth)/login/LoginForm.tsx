@@ -50,7 +50,7 @@ export function LoginForm({ next }: { next?: string }) {
       <SubmitButton pendingText="Logging in…">Log in</SubmitButton>
 
       <p className="pt-2 text-center text-sm text-ink-muted">
-        Have an invite?{" "}
+        New here?{" "}
         <Link href="/signup" className="font-semibold text-brand hover:underline">
           Create an account
         </Link>

@@ -43,9 +43,34 @@ object Account {
         Backend.auth.updateUser { this.password = password }
     }
 
+    @Serializable
+    private data class SignupSettings(val inviteOnly: Boolean = false)
+
+    /** Whether sign-up needs an invite code right now (0028), or null if the website can't be reached. */
+    suspend fun inviteOnly(): Boolean? = withContext(Dispatchers.IO) {
+        runCatching {
+            val connection = (URL(BuildConfig.SITE_URL + "/api/auth/signup").openConnection() as HttpURLConnection).apply {
+                connectTimeout = 10_000
+                readTimeout = 10_000
+                setRequestProperty("Accept", "application/json")
+            }
+            try {
+                check(connection.responseCode == 200) { "The website answered ${connection.responseCode}" }
+                val text = connection.inputStream.bufferedReader().use { it.readText() }
+                Backend.json.decodeFromString<SignupSettings>(text).inviteOnly
+            } finally {
+                connection.disconnect()
+            }
+        }.getOrNull()
+    }
+
+    /** The website's sign-up page, for sharing while sign-up is open. */
+    val signupLink get() = "${BuildConfig.SITE_URL}/signup"
+
     /**
-     * Creating an account needs the invite check, which only the website's
-     * server can do (it holds the secret key), so the app asks it, then signs in.
+     * Creating an account needs the secret key (and, while sign-up is
+     * invite-only, the invite check), which only the website's server holds,
+     * so the app asks it, then signs in.
      */
     suspend fun signUp(request: SignupRequest) {
         val result = postToSite("/api/auth/signup", Backend.json.encodeToString(request), bearer = null)
