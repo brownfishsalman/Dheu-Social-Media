@@ -124,7 +124,7 @@ From 0.3.0, the app checks GitHub for a newer release twice a day and shows "Dhe
 
 1. Raise `versionCode` and `versionName` in `android/app/build.gradle.kts` (0.3.0 is already set).
 2. Build and sign as in [android/README.md](../android/README.md#release-builds), with your own release key, which never leaves your computer. Since 0.3.0 that's `dheu-release-2026.jks`; keep its password in a password manager, because without it the next release needs a new key and everyone has to reinstall.
-3. On GitHub → Releases → **Draft a new release**: tag `v` + the version name (for example `v0.3.0`), attach the signed APK, paste the notes, publish. The banner looks for exactly that tag and an attached `.apk`.
+3. On GitHub → Releases → **Draft a new release**: tag `v` + the version name, with a lowercase `v` (for example `v0.4.0`), attach the signed APK, paste the notes, publish. The banner reads that tag and the attached `.apk`. The 0.3.0 app only understands a lowercase `v`; later versions accept a capital one too. Copy the notes from the `.md` file opened in a text editor such as Notepad, not from a preview, so the headings and lists survive.
 
 0.3.0 is signed with a new key, and 0.2.0 doesn't have the banner yet, so for 0.3.0 itself, tell members in **Dheu announcements**: uninstall the Dheu app, install 0.3.0 from the release page, and log in again. Nothing is lost; everything lives on the server. From 0.3.0 on, updates install over the app and the banner announces them.
 

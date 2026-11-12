@@ -79,7 +79,7 @@ apksigner verify --print-certs Dheu-0.3.0.apk
 
 Raise `versionCode` and `versionName` in `app/build.gradle.kts` before each release. Google Play takes an app bundle (`./gradlew bundleRelease`) rather than an APK; with Play App Signing, the key above becomes your upload key.
 
-Publish on GitHub with the tag `v` + `versionName` (for example `v0.3.0`) and the signed APK attached. From 0.3.0 the app asks GitHub for the latest release (`data/Updates.kt`, at most twice a day) and shows a "new version" banner on the feed when the tag is newer than itself, linking straight to the attached `.apk`. `dheu.releasesRepo` in `local.properties` points it at another repository.
+Publish on GitHub with the tag `v` + `versionName` (for example `v0.4.0`) and the signed APK attached. Keep the `v` lowercase: 0.3.0 reads only that, and later versions take either case. From 0.3.0 the app asks GitHub for the latest release (`data/Updates.kt`, at most twice a day) and shows a "new version" banner on the feed when the tag is newer than itself, linking straight to the attached `.apk`. `dheu.releasesRepo` in `local.properties` points it at another repository.
 
 Release builds aren't obfuscated (`proguard-rules.pro`): R8 still shrinks and optimises, but class and method names stay readable, so crash reports (`data/CrashReports.kt`, shown in the website's Admin → Crashes) read as they are, without a mapping file.
 

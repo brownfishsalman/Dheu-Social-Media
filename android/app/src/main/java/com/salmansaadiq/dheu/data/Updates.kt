@@ -40,7 +40,8 @@ object Updates {
         if (System.currentTimeMillis() - UpdatePrefs.checkedAt(context) >= CHECK_EVERY_MS) {
             runCatching { latest() }.getOrNull()?.takeIf { !it.draft && !it.prerelease }?.let { release ->
                 val apk = release.assets.firstOrNull { it.name.endsWith(".apk") }?.url
-                UpdatePrefs.saveLatest(context, release.tag.removePrefix("v"), apk ?: release.page)
+                // Tags are "v" + the version; a capital V, easy to type by mistake, counts too.
+                UpdatePrefs.saveLatest(context, release.tag.trimStart('v', 'V'), apk ?: release.page)
             }
         }
         val (version, url) = UpdatePrefs.latest(context) ?: return null
