@@ -22,9 +22,8 @@ import androidx.compose.ui.unit.sp
 import com.salmansaadiq.dheu.R
 
 // The website's design tokens (src/app/globals.css), sampled from the logo:
-// navy #00273D, teal #1589A5, aqua #BDDEE6. Dark mode differs from the
-// website's: a soft, faintly cool black instead of navy, easier on the eyes,
-// with the same teal accents.
+// navy #00273D, teal #1589A5, aqua #BDDEE6. Both themes use the website's
+// values: warm "Paper" in light, a soft, faintly cool black in dark.
 @Immutable
 data class DheuColors(
     val canvas: Color,
@@ -46,12 +45,14 @@ data class DheuColors(
     val isDark: Boolean,
 )
 
+// Light ("Paper"): a warm off-white from the logo cream, with no pure white and
+// navy text softened toward slate, easier on the eyes. Same values as the website.
 val LightColors = DheuColors(
-    canvas = Color(0xFFF3F7F9), surface = Color(0xFFFFFFFF), surface2 = Color(0xFFE8F0F4), line = Color(0xFFD5E2E9),
-    ink = Color(0xFF00273D), inkMuted = Color(0xFF587687), inkFaint = Color(0xFF8FA6B4),
-    brand = Color(0xFF1589A5), brandStrong = Color(0xFF0E5368), brandSoft = Color(0xFFD9EDF2), brandInk = Color(0xFFFFFFFF),
+    canvas = Color(0xFFEDE9E3), surface = Color(0xFFF7F5F1), surface2 = Color(0xFFE8E3DB), line = Color(0xFFDDD6CC),
+    ink = Color(0xFF1E2B33), inkMuted = Color(0xFF5F6B70), inkFaint = Color(0xFF948F86),
+    brand = Color(0xFF13809A), brandStrong = Color(0xFF0E5368), brandSoft = Color(0xFFD6E8EA), brandInk = Color(0xFFFFFFFF),
     waveA = Color(0xFF2BA3BF), waveB = Color(0xFF194158),
-    danger = Color(0xFFC93B3B), dangerSoft = Color(0xFFFBE4E4), like = Color(0xFFE5484D), isDark = false,
+    danger = Color(0xFFB8322F), dangerSoft = Color(0xFFF8E6E2), like = Color(0xFFE5484D), isDark = false,
 )
 
 val DarkColors = DheuColors(

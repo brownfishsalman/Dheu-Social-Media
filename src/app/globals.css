@@ -9,29 +9,32 @@
 /* ------------------------------------------------------------------ */
 /* Palette sampled from the Dheu logo: navy #00273D, teal #1589A5,
    aqua #BDDEE6, slate-teal #518392, deep teal #0E5368, cream #F2EFEB. */
+/* Light ("Paper"): a warm off-white from the logo cream, with no pure white
+   and navy text softened toward slate, so it's easier on the eyes. Same
+   values as the Android app. */
 :root {
-  --canvas: #f3f7f9; /* page background */
-  --surface: #ffffff; /* cards, bars */
-  --surface-2: #e8f0f4; /* subtle fills, inputs */
-  --line: #d5e2e9; /* borders */
-  --ink: #00273d; /* primary text = logo navy */
-  --ink-muted: #587687; /* secondary text */
-  --ink-faint: #8fa6b4; /* placeholders, timestamps */
-  --wordmark: #00273d;
+  --canvas: #ede9e3; /* page background */
+  --surface: #f7f5f1; /* cards, bars */
+  --surface-2: #e8e3db; /* subtle fills, inputs */
+  --line: #ddd6cc; /* borders */
+  --ink: #1e2b33; /* primary text */
+  --ink-muted: #5f6b70; /* secondary text */
+  --ink-faint: #948f86; /* placeholders, timestamps */
+  --wordmark: #00273d; /* logo navy */
 
-  --brand: #1589a5; /* logo teal */
+  --brand: #13809a; /* logo teal, a shade deeper for white text on it */
   --brand-strong: #0e5368;
-  --brand-soft: #d9edf2;
+  --brand-soft: #d6e8ea;
   --brand-ink: #ffffff;
   --wave-a: #2ba3bf; /* gradient: bright teal */
   --wave-b: #194158; /* gradient: deep blue */
 
-  --danger: #c93b3b;
-  --danger-soft: #fbe4e4;
+  --danger: #b8322f;
+  --danger-soft: #f8e6e2;
   --like: #e5484d;
 
   --radius: 14px;
-  --shadow: 0 1px 2px rgb(0 39 61 / 0.06), 0 6px 20px -8px rgb(0 39 61 / 0.14);
+  --shadow: 0 1px 2px rgb(60 45 30 / 0.06), 0 6px 20px -8px rgb(60 45 30 / 0.14);
 }
 
 /* Dark: a soft, faintly cool black (easier on the eyes than navy or pure
