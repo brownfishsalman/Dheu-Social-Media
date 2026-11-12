@@ -66,7 +66,6 @@ import com.salmansaadiq.dheu.data.SuggestionPrefs
 import com.salmansaadiq.dheu.data.Updates
 import com.salmansaadiq.dheu.data.friendly
 import com.salmansaadiq.dheu.ui.LocalAppState
-import com.salmansaadiq.dheu.ui.auth.Wordmark
 import com.salmansaadiq.dheu.ui.components.Avatar
 import com.salmansaadiq.dheu.ui.components.CountBadge
 import com.salmansaadiq.dheu.ui.components.FollowButton
@@ -189,7 +188,13 @@ fun HomeScreen() {
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
-            title = { Wordmark(26) },
+            // New posts start here, where the wordmark used to be; the middle tab is Find friends.
+            title = {},
+            navigationIcon = {
+                IconButton(onClick = { nav.to(CreateRoute()) }) {
+                    Icon(Lucide.SquarePlus, "New post", tint = c.ink, modifier = Modifier.size(26.dp))
+                }
+            },
             actions = {
                 IconButton(onClick = { nav.to(ActivityRoute) }) {
                     Box {
@@ -220,7 +225,7 @@ fun HomeScreen() {
                             ) {
                                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                     SecondaryButton("Find people", { nav.tab(SearchRoute) }, icon = Lucide.Search)
-                                    PrimaryButton("Create a post", { nav.tab(CreateRoute()) }, icon = Lucide.Camera)
+                                    PrimaryButton("Create a post", { nav.to(CreateRoute()) }, icon = Lucide.Camera)
                                 }
                             }
                         }

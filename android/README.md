@@ -4,12 +4,13 @@ The native Android app for [Dheu](../README.md), written in Kotlin with Jetpack 
 
 It runs on Android 9 (API 28) and newer. Test builds are on the [Releases page](https://github.com/brownfishsalman/Dheu-Social-Media/releases).
 
-## What's in 0.3.0
+## What's in 0.4.0
 
 Everything a member can do on the website, except the admin panel, which stays there.
 
 - Sign-up with an invite code and a public or private account, sign-in, and the privacy choice for older accounts that never made one.
-- The home feed with stories and, now and then, "Suggested for you". Posts with swipeable photos, double-tap likes, comments with replies and likes, a likers list, a bookmark that keeps a post in your Saved tab, saving your own posts' photos to the phone, and sharing a new post of up to 10 photos.
+- The home feed with stories and, now and then, "Suggested for you". Posts with swipeable photos, double-tap likes, comments with replies and likes, a likers list, a bookmark that keeps a post in your Saved tab, saving your own posts' photos to the phone, and sharing a new post of up to 10 photos from the + at the top of Home.
+- Find friends, the flame tab: make a swipe profile (1 to 6 photos, a bio, an optional age and up to five interests), then swipe right to like or left to pass, with one undo. A mutual like is a match, with an "It's a match" screen and a chat in Messages; a matches list lets you unmatch or report. Once you've seen everyone, the people you passed on come back.
 - Profiles with follow, unfollow, follow requests, follower lists, blocking, search, a Saved tab only you can see, and highlights: view them, make one from your stories, add a story to one from the story itself, remove a story or delete a highlight.
 - Stories you can view, post to everyone or to your close friends, react to, reply to and check who has seen.
 - Activity with follow requests to accept or decline.
@@ -90,14 +91,14 @@ app/src/main/java/com/salmansaadiq/dheu/
   DheuApp.kt          image loader with a 250 MB disk cache
   MainActivity.kt     splash screen, edge-to-edge, theme
   data/               the Supabase client and one object per area:
-                      Account, Profiles, Posts, Stories, Chat, Notes, Activity
+                      Account, Profiles, Posts, Stories, Chat, Notes, Activity, Friends
   data/Images.kt      photo resizing and JPEG encoding
   data/Mentions.kt    reading @mentions (same rule as the website and the database)
   data/Push.kt        Firebase setup and this phone's token in push_devices
   push/               the messaging service and the notifications it builds
   ui/nav/             type-safe routes, screen transitions, the bottom bar, the privacy gate,
                       and opening a tapped notification's screen
-  ui/auth, feed, post, profile, search, activity, create, stories, messages, settings
+  ui/auth, feed, post, profile, search, activity, create, stories, messages, settings, friends
                       the screens
   ui/components/      shared pieces: avatars, buttons, fields, sheets, dialogs
   ui/theme/           the website's colour tokens, Inter and Outfit

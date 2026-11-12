@@ -78,6 +78,9 @@ import com.salmansaadiq.dheu.ui.components.ErrorState
 import com.salmansaadiq.dheu.ui.components.Loading
 import com.salmansaadiq.dheu.ui.create.CreateScreen
 import com.salmansaadiq.dheu.ui.feed.HomeScreen
+import com.salmansaadiq.dheu.ui.friends.FriendsScreen
+import com.salmansaadiq.dheu.ui.friends.MatchesScreen
+import com.salmansaadiq.dheu.ui.friends.SwipeProfileScreen
 import com.salmansaadiq.dheu.ui.icons.Lucide
 import com.salmansaadiq.dheu.ui.messages.AddMembersScreen
 import com.salmansaadiq.dheu.ui.messages.AnnouncementsScreen
@@ -133,6 +136,9 @@ import kotlin.reflect.KClass
 @Serializable data class AddMembersRoute(val conversationId: String)
 @Serializable data class HighlightRoute(val id: String)
 @Serializable object NewHighlightRoute
+@Serializable object FriendsRoute
+@Serializable object SwipeProfileRoute
+@Serializable object MatchesRoute
 
 /** What screens use to move around, without holding the NavController themselves. */
 class Nav(private val controller: NavHostController) {
@@ -187,6 +193,8 @@ private fun routeFor(url: String): Any? {
     val id = parts.getOrNull(1)
     return when {
         parts == listOf("messages", "announcements") -> AnnouncementsRoute
+        parts == listOf("friends", "matches") -> MatchesRoute
+        parts == listOf("friends") -> FriendsRoute
         parts.size == 2 && parts[0] == "messages" -> ChatRoute(id!!)
         parts.size == 2 && parts[0] == "p" -> PostRoute(id!!)
         parts.size == 2 && parts[0] == "u" -> ProfileRoute(id!!)
@@ -223,10 +231,11 @@ private fun PushSetup() {
 // gesture drags the page with the finger (predictive back) instead of
 // shrinking it into a card. Stories fade, and switching tabs is instant.
 
-private val TAB_ROUTES = listOf(HomeRoute::class, SearchRoute::class, CreateRoute::class, MessagesRoute::class, MeRoute::class)
+// New posts start from the + at the top of Home (CreateRoute), which slides in like any screen.
+private val TAB_ROUTES = listOf(HomeRoute::class, SearchRoute::class, FriendsRoute::class, MessagesRoute::class, MeRoute::class)
 
 /** Screens that keep the bottom bar, like Instagram's profile and lists. */
-private val BAR_ROUTES = TAB_ROUTES + listOf(ProfileRoute::class, FollowListRoute::class, LikesRoute::class, ActivityRoute::class)
+private val BAR_ROUTES = TAB_ROUTES + listOf(ProfileRoute::class, FollowListRoute::class, LikesRoute::class, ActivityRoute::class, MatchesRoute::class)
 
 /** Full-screen photo viewers: they fade over the screen below instead of sliding. */
 private val MEDIA_ROUTES = listOf(StoryRoute::class, HighlightRoute::class)
@@ -315,7 +324,7 @@ private fun MainNav() {
     val tabs = listOf(
         Tab(HomeRoute, "Home", Lucide.Home),
         Tab(SearchRoute, "Search", Lucide.Search),
-        Tab(CreateRoute(), "Create", Lucide.SquarePlus),
+        Tab(FriendsRoute, "Find friends", Lucide.Flame),
         Tab(MessagesRoute, "Messages", Lucide.MessageCircle),
         Tab(MeRoute, "Profile", null),
     )
@@ -406,7 +415,10 @@ private fun MainNav() {
             ) {
                 composable<HomeRoute> { Page(barHeight) { HomeScreen() } }
                 composable<SearchRoute> { Page(barHeight) { SearchScreen() } }
-                composable<CreateRoute> { Page(barHeight) { CreateScreen(startWithStory = it.toRoute<CreateRoute>().story) } }
+                composable<CreateRoute> { Page { CreateScreen(startWithStory = it.toRoute<CreateRoute>().story) } }
+                composable<FriendsRoute> { Page(barHeight) { FriendsScreen() } }
+                composable<SwipeProfileRoute> { Page { SwipeProfileScreen() } }
+                composable<MatchesRoute> { Page(barHeight) { MatchesScreen() } }
                 composable<MessagesRoute> { Page(barHeight) { InboxScreen() } }
                 composable<MeRoute> { Page(barHeight) { me?.let { profile -> ProfileScreen(profile.username, isTab = true) } } }
                 composable<ProfileRoute> { Page(barHeight) { ProfileScreen(it.toRoute<ProfileRoute>().username) } }

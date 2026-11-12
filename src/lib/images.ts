@@ -15,6 +15,8 @@ export const POST_MAX = { maxW: 1080, maxH: 1920, quality: 0.9 };
 export const POST_THUMB = { maxW: 480, maxH: 480, quality: 0.8, square: true };
 export const STORY_MAX = { maxW: 1080, maxH: 1920, quality: 0.9 };
 export const AVATAR_MAX = { maxW: 320, maxH: 320, quality: 0.88, square: true };
+// Find friends cards are portrait; the photo is cropped to fit when shown.
+export const SWIPE_MAX = { maxW: 1080, maxH: 1440, quality: 0.88 };
 
 type Options = { maxW: number; maxH: number; quality?: number; square?: boolean };
 

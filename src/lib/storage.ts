@@ -6,9 +6,10 @@
 // public for older app versions; once they're switched to private (see
 // docs/OWNER-GUIDE.md) those rules are the only way in.
 
-export type Bucket = "avatars" | "posts" | "stories" | "chat";
+// "swipe" (Find friends photos, 0027) was private from the start.
+export type Bucket = "avatars" | "posts" | "stories" | "chat" | "swipe";
 
-const BUCKETS: readonly string[] = ["avatars", "posts", "stories", "chat"] satisfies Bucket[];
+const BUCKETS: readonly string[] = ["avatars", "posts", "stories", "chat", "swipe"] satisfies Bucket[];
 
 export function isBucket(name: string): name is Bucket {
   return BUCKETS.includes(name);

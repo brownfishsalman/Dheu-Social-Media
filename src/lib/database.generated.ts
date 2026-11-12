@@ -1462,6 +1462,148 @@ export type Database = {
           },
         ]
       }
+      swipe_matches: {
+        Row: {
+          a_seen_at: string | null
+          b_seen_at: string | null
+          conversation_id: string | null
+          created_at: string
+          matched_by: string
+          user_a: string
+          user_b: string
+        }
+        Insert: {
+          a_seen_at?: string | null
+          b_seen_at?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          matched_by: string
+          user_a: string
+          user_b: string
+        }
+        Update: {
+          a_seen_at?: string | null
+          b_seen_at?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          matched_by?: string
+          user_a?: string
+          user_b?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "swipe_matches_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "swipe_matches_matched_by_fkey"
+            columns: ["matched_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "swipe_matches_user_a_fkey"
+            columns: ["user_a"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "swipe_matches_user_b_fkey"
+            columns: ["user_b"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      swipe_profiles: {
+        Row: {
+          active: boolean
+          age: number | null
+          bio: string
+          created_at: string
+          deck_round: number
+          interests: string[]
+          photos: string[]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          age?: number | null
+          bio?: string
+          created_at?: string
+          deck_round?: number
+          interests?: string[]
+          photos: string[]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active?: boolean
+          age?: number | null
+          bio?: string
+          created_at?: string
+          deck_round?: number
+          interests?: string[]
+          photos?: string[]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "swipe_profiles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      swipes: {
+        Row: {
+          action: string
+          round: number
+          swiped_at: string
+          swiper_id: string
+          target_id: string
+        }
+        Insert: {
+          action: string
+          round?: number
+          swiped_at?: string
+          swiper_id: string
+          target_id: string
+        }
+        Update: {
+          action?: string
+          round?: number
+          swiped_at?: string
+          swiper_id?: string
+          target_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "swipes_swiper_id_fkey"
+            columns: ["swiper_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "swipes_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       home_feed: {
@@ -1619,7 +1761,20 @@ export type Database = {
         Args: { p_conversation_id: string }
         Returns: undefined
       }
+      mark_swipe_matches_seen: { Args: never; Returns: undefined }
       mentioned_profiles: { Args: { p_text: string }; Returns: string[] }
+      my_swipe_matches: {
+        Args: never
+        Returns: {
+          avatar_path: string
+          conversation_id: string
+          full_name: string
+          matched_at: string
+          seen: boolean
+          user_id: string
+          username: string
+        }[]
+      }
       open_view_once: { Args: { p_message_id: string }; Returns: string }
       post_system_message: {
         Args: {
@@ -1684,6 +1839,27 @@ export type Database = {
           once_path: string
         }[]
       }
+      swipe: {
+        Args: { p_like: boolean; p_target: string }
+        Returns: {
+          conversation_id: string
+          matched: boolean
+        }[]
+      }
+      swipe_deck: {
+        Args: { p_exclude?: string[]; p_limit?: number }
+        Returns: {
+          age: number
+          bio: string
+          full_name: string
+          interests: string[]
+          looped: boolean
+          photos: string[]
+          user_id: string
+        }[]
+      }
+      swipe_undo: { Args: { p_target: string }; Returns: boolean }
+      swipe_unmatch: { Args: { p_other: string }; Returns: undefined }
       unread_announcement_count: { Args: never; Returns: number }
       unread_counts: {
         Args: never

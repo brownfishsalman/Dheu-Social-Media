@@ -53,4 +53,6 @@ object Buckets {
     const val CHAT = "chat"
     /** View-once photos: private, downloadable only right after opening (0023). */
     const val ONCE = "once"
+    /** Find friends photos: private, readable by people who can see the swipe profile (0027). */
+    const val SWIPE = "swipe"
 }

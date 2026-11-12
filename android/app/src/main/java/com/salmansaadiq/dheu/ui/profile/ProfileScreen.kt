@@ -262,7 +262,7 @@ private fun ProfileBody(data: ProfileData, onChanged: () -> Unit) {
                     )
                     if (isMe) {
                         Spacer(Modifier.height(16.dp))
-                        PrimaryButton("Create a post", { nav.tab(CreateRoute()) })
+                        PrimaryButton("Create a post", { nav.to(CreateRoute()) })
                     }
                 }
             }

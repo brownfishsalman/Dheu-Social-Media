@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Search, PlusSquare, MessageCircle, Heart, Shield, Settings } from "lucide-react";
+import { Home, Search, PlusSquare, MessageCircle, Heart, Shield, Settings, Flame } from "lucide-react";
 import { Logo, WaveMark } from "@/components/brand/Logo";
 import { Avatar } from "@/components/ui/Avatar";
 import type { Profile } from "@/lib/database.types";
@@ -33,6 +33,7 @@ export function Sidebar({ profile }: Props) {
   const items: NavItem[] = [
     { href: "/", label: "Home", icon: Home },
     { href: "/explore", label: "Search", icon: Search },
+    { href: "/friends", label: "Find friends", icon: Flame },
     { href: "/new", label: "Create", icon: PlusSquare },
     { href: "/activity", label: "Activity", icon: Heart, badge: "activity" },
     { href: "/messages", label: "Messages", icon: MessageCircle, badge: "messages" },
@@ -104,10 +105,11 @@ export function TabBar({ profile }: Props) {
   const pathname = usePathname();
   const profileHref = `/u/${profile.username}`;
 
+  // New posts start from the + at the top left (MobileHeader).
   const items: NavItem[] = [
     { href: "/", label: "Home", icon: Home },
     { href: "/explore", label: "Search", icon: Search },
-    { href: "/new", label: "Create", icon: PlusSquare },
+    { href: "/friends", label: "Find friends", icon: Flame },
     { href: "/messages", label: "Messages", icon: MessageCircle, badge: "messages" },
   ];
 
@@ -153,11 +155,13 @@ export function TabBar({ profile }: Props) {
   );
 }
 
-// Phone top header (below md).
+// Phone top header (below md). The + for a new post sits where the logo was.
 export function MobileHeader() {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-surface/95 px-4 backdrop-blur pt-safe md:hidden">
-      <Logo size={28} />
+      <Link href="/new" aria-label="New post" className="-ml-1 p-1 text-ink">
+        <PlusSquare className="size-[26px]" />
+      </Link>
       <div className="-mr-1 flex items-center gap-1">
         <Link href="/activity" aria-label="Activity" className="relative p-1 text-ink">
           <Heart className="size-[26px]" />

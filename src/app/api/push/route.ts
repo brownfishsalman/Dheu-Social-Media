@@ -4,8 +4,9 @@ import { sendPush, type PushPayload } from "@/lib/push";
 import { adminSignedUrls } from "@/lib/storage-server";
 import { TARGET_NOUNS, reasonLabel, type ReportTargetType } from "@/lib/reports";
 
-// Called by the database (pg_net trigger) whenever a notification, message or
-// announcement row is inserted. Authenticated with a shared secret held in
+// Called by the database (pg_net trigger) whenever a notification, message,
+// announcement or other watched row (reactions, comment likes, reports,
+// Find friends matches) is inserted. Authenticated with a shared secret held in
 // Supabase Vault and in the PUSH_WEBHOOK_SECRET environment variable.
 
 type NotificationRow = {
@@ -34,6 +35,7 @@ type AnnouncementRow = { id: string; body: string };
 type ReactionRow = { message_id: string; user_id: string; conversation_id: string; emoji: string }; // 0023
 type CommentLikeRow = { comment_id: string; user_id: string }; // 0024
 type ReportRow = { id: string; reporter_id: string | null; target_type: ReportTargetType; reason: string }; // 0025
+type SwipeMatchRow = { user_a: string; user_b: string; matched_by: string; conversation_id: string | null }; // 0027
 
 // A day is plenty: the phone or browser fetches the icon as the notification arrives.
 const ICON_LINK_SECONDS = 24 * 60 * 60;
@@ -193,6 +195,20 @@ export async function POST(request: Request) {
       body: `New report about ${noun === "account" ? "an" : "a"} ${noun}: ${reasonLabel(r.reason)}`,
       url: "/admin/reports",
       tag: "admin-reports",
+    };
+  } else if (table === "swipe_matches") {
+    // "It's a match", to whoever swiped right first: the other one just saw
+    // it on screen. Tapping it opens their new chat.
+    const r = record as SwipeMatchRow;
+    const other = r.matched_by === r.user_a ? r.user_b : r.user_a;
+    const { name: actor, icon } = await personOf(r.matched_by);
+    recipients = [other];
+    payload = {
+      title: "It's a match",
+      body: `You and ${actor} both swiped right in Find friends. Say hi!`,
+      url: r.conversation_id ? `/messages/${r.conversation_id}` : "/friends/matches",
+      tag: `match-${r.matched_by}`,
+      icon,
     };
   } else if (table === "announcements") {
     const a = record as AnnouncementRow;

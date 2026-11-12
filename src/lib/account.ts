@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Every bucket keeps a member's files in a folder named after their id.
-const BUCKETS = ["avatars", "posts", "stories", "chat", "once"] as const;
+const BUCKETS = ["avatars", "posts", "stories", "chat", "once", "swipe"] as const;
 
 // Removes all of a member's files, a thousand at a time.
 export async function removeUserFiles(userId: string) {

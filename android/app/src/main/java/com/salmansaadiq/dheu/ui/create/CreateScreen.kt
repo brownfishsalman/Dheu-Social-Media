@@ -63,6 +63,8 @@ import com.salmansaadiq.dheu.ui.components.DheuTopBar
 import com.salmansaadiq.dheu.ui.components.PrimaryButton
 import com.salmansaadiq.dheu.ui.icons.Lucide
 import com.salmansaadiq.dheu.ui.nav.LocalNav
+import com.salmansaadiq.dheu.ui.nav.PostRoute
+import com.salmansaadiq.dheu.ui.nav.StoryRoute
 import com.salmansaadiq.dheu.ui.theme.CloseFriendsGreen
 import com.salmansaadiq.dheu.ui.theme.Dheu
 import kotlinx.coroutines.launch
@@ -72,9 +74,11 @@ private const val MAX_PHOTOS = 10
 @Composable
 fun CreateScreen(startWithStory: Boolean) {
     var story by rememberSaveable { mutableStateOf(startWithStory) }
+    val nav = LocalNav.current
     val c = Dheu.colors
     Column(Modifier.fillMaxSize().background(c.surface)) {
-        DheuTopBar("Create")
+        // Opened from the + on Home (or Your story), so it has a way back.
+        DheuTopBar("Create", onBack = nav::back)
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(16.dp)) {
             listOf("Post" to false, "Story" to true).forEachIndexed { i, (label, value) ->
                 SegmentedButton(
@@ -157,7 +161,8 @@ private fun NewPost() {
                         val id = Posts.create(context, me, photos, caption.text) { progress = it }
                         photos = emptyList()
                         caption = TextFieldValue("")
-                        nav.post(id)
+                        // The new post takes Create's place, so Back goes to where Create was opened from.
+                        nav.replace(PostRoute(id))
                     } catch (e: Exception) {
                         error = e.friendly("Couldn't share the post.")
                     } finally {
@@ -201,7 +206,7 @@ private fun NewStory() {
             try {
                 Stories.create(context, me, uri, audience)
                 photo = null
-                nav.story(me)
+                nav.replace(StoryRoute(me))
             } catch (e: Exception) {
                 error = e.friendly("Couldn't share your story.")
             } finally {

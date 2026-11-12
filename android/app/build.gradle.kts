@@ -47,8 +47,8 @@ android {
         applicationId = "com.salmansaadiq.dheu"
         minSdk = 28
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 4
+        versionName = "0.4.0"
 
         buildConfigField("String", "SUPABASE_URL", "\"${setting("dheu.supabaseUrl")}\"")
         buildConfigField("String", "SUPABASE_KEY", "\"${setting("dheu.supabaseKey")}\"")

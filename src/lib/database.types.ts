@@ -7,6 +7,7 @@
 // the code imports.
 
 import type { Database as Generated, Json } from "./database.generated";
+import type { SwipeCard, SwipeMatch } from "./friends";
 
 export type { Json };
 
@@ -23,6 +24,7 @@ export type StoryAudience = "everyone" | "close_friends"; // 0024
 export type ReportTargetType = "post" | "story" | "comment" | "profile"; // 0025
 export type ReportReason = "spam" | "harassment" | "hate" | "nudity" | "violence" | "self_harm" | "other";
 export type ReportStatus = "open" | "resolved" | "dismissed";
+export type SwipeAction = "like" | "pass" | "unmatched"; // 0027
 
 type Simplify<T> = { [K in keyof T]: T[K] } & {};
 
@@ -76,6 +78,11 @@ type Overrides = {
         Insert: { target_type: ReportTargetType; reason: ReportReason; status?: ReportStatus };
         Update: { target_type?: ReportTargetType; reason?: ReportReason; status?: ReportStatus };
       };
+      swipes: {
+        Row: { action: SwipeAction };
+        Insert: { action: SwipeAction };
+        Update: { action?: SwipeAction };
+      };
     };
     Views: {
       post_feed: { Row: NonNullRow<GeneratedViews["post_feed"]["Row"]> };
@@ -93,6 +100,11 @@ type Overrides = {
           Omit<GeneratedFunctions["profile_stats"]["Returns"][number], "block_status"> & { block_status: string | null }
         >[];
       };
+      // Columns the generator reports as never null: age (optional on a
+      // profile), the chat of a match, a match's avatar (0027).
+      swipe_deck: { Returns: SwipeCard[] };
+      swipe: { Returns: { matched: boolean; conversation_id: string | null }[] };
+      my_swipe_matches: { Returns: SwipeMatch[] };
     };
   };
 };

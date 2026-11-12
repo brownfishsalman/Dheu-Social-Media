@@ -56,6 +56,7 @@ Useful commands:
    - `supabase/migrations/0024_posts_stories_extras.sql` (close friends stories, saved posts, comment replies and likes; run before deploying the code that uses it)
    - `supabase/migrations/0025_safety_privacy.sql` (reports, the block check out of the API's reach, photo access rules; run before deploying the code that uses it)
    - `supabase/migrations/0026_app_crashes.sql` (crash reports from the Android app; the site's Admin → Crashes page needs it)
+   - `supabase/migrations/0027_friend_swipes.sql` (Find friends: swipe profiles, likes and matches, and a private `swipe` photo bucket; run before deploying the code that uses it)
    (0016–0020 must run before deploying the code that uses them.)
    Never add the `private` schema (made by 0024) to the API's exposed schemas: it holds checks that members must not be able to call.
 2. **Turn off "Confirm email"** – Supabase → Authentication → Sign In / Providers → Email → untick _Confirm email_. (Accounts are created by the app with the invite code, so no confirmation email is needed. The free tier can't send emails to arbitrary addresses anyway.)
@@ -107,11 +108,12 @@ Everything is under **Settings → Open admin panel** (only visible to the admin
 - **Reports** – what members reported (a post, story, comment or account), one card per thing with every reason given. Remove it, suspend the member, mark it handled, or dismiss it; closed reports stay listed with who closed them. You get a push for each new report.
 - **Crashes** – when the Android app crashes, it sends the details the next time that member opens it: the error and where in the code it happened, the app and Android versions and the phone model. They're grouped by where they happened, most frequent first; open one for the full stack trace. Reports are deleted after 90 days.
 - **Overview** – open reports, app crashes this week, member count, storage used vs. the free 1 GB, etc.
+- **Find friends** – the flame tab, where members who make a swipe profile swipe through each other's; a mutual like opens a chat. Nobody can see whom anyone else liked, not even the admin from the website. A report about a swipe profile arrives as a report about the account. To take down just someone's swipe profile, delete their row in Supabase → Table Editor → `swipe_profiles` (their photos stay in the `swipe` bucket until they or you delete them); suspending the member hides them everywhere.
 - **Deleted accounts** – members can delete their own account (Settings → Delete account, password needed). It removes their files and everything they posted, like deleting a member here. The admin account can't delete itself.
 
 ### Making photos private (once members have updated)
 
-Photos used to be readable by anyone who had a photo's link. Since 0025, the website and the app (from 0.3.0) load every photo through a short-lived signed link, which Storage gives only to members allowed to see that photo. The buckets themselves are still public, because older app versions load photos from the public links. Once everyone has updated the app, switch them off:
+Photos used to be readable by anyone who had a photo's link. Since 0025, the website and the app (from 0.3.0) load every photo through a short-lived signed link, which Storage gives only to members allowed to see that photo. The buckets themselves are still public, because older app versions load photos from the public links. (Find friends photos, in the `swipe` bucket from 0027, were private from the start.) Once everyone has updated the app, switch them off:
 
 1. Supabase → Storage → for each of `avatars`, `posts`, `stories` and `chat`: **Edit bucket** → untick **Public bucket** → Save. (Or in the SQL Editor: `update storage.buckets set public = false where id in ('avatars', 'posts', 'stories', 'chat');`)
 2. Check the website and the app still show photos. Anyone on the old app will see blank photos until they update.
@@ -122,7 +124,7 @@ To undo, tick **Public bucket** again (or run the same statement with `public = 
 
 From 0.3.0, the app checks GitHub for a newer release twice a day and shows "Dheu x.y.z is out" at the top of the feed, with a button that downloads the APK.
 
-1. Raise `versionCode` and `versionName` in `android/app/build.gradle.kts` (0.3.0 is already set).
+1. Raise `versionCode` and `versionName` in `android/app/build.gradle.kts` (0.4.0, with Find friends, is already set).
 2. Build and sign as in [android/README.md](../android/README.md#release-builds), with your own release key, which never leaves your computer. Since 0.3.0 that's `dheu-release-2026.jks`; keep its password in a password manager, because without it the next release needs a new key and everyone has to reinstall.
 3. On GitHub → Releases → **Draft a new release**: tag `v` + the version name, with a lowercase `v` (for example `v0.4.0`), attach the signed APK, paste the notes, publish. The banner reads that tag and the attached `.apk`. The 0.3.0 app only understands a lowercase `v`; later versions accept a capital one too. Copy the notes from the `.md` file opened in a text editor such as Notepad, not from a preview, so the headings and lists survive.
 
