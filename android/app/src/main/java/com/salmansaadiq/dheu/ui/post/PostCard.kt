@@ -8,9 +8,13 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -46,9 +50,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -97,6 +103,7 @@ fun PostCard(post: Post, onDeleted: () -> Unit, detail: Boolean = false) {
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
     val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
 
     var liked by remember(post.id) { mutableStateOf(post.likedByMe) }
     var likes by remember(post.id) { mutableIntStateOf(post.likeCount) }
@@ -179,6 +186,7 @@ fun PostCard(post: Post, onDeleted: () -> Unit, detail: Boolean = false) {
 
         Box {
             Carousel(post.images, onDoubleTap = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                 burst = true
                 setLiked(true)
             })
@@ -192,7 +200,10 @@ fun PostCard(post: Post, onDeleted: () -> Unit, detail: Boolean = false) {
         }
 
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { setLiked(!liked) }) {
+            IconButton(onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                setLiked(!liked)
+            }) {
                 Icon(
                     if (liked) Lucide.HeartFilled else Lucide.Heart,
                     if (liked) "Unlike" else "Like",
@@ -204,7 +215,10 @@ fun PostCard(post: Post, onDeleted: () -> Unit, detail: Boolean = false) {
                 Icon(Lucide.MessageCircle, "Comments", tint = c.ink, modifier = Modifier.size(26.dp))
             }
             Spacer(Modifier.weight(1f))
-            IconButton(onClick = { setSaved(!saved) }) {
+            IconButton(onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                setSaved(!saved)
+            }) {
                 Icon(
                     if (saved) Lucide.BookmarkFilled else Lucide.Bookmark,
                     if (saved) "Remove from saved" else "Save",
@@ -295,7 +309,21 @@ fun PostCard(post: Post, onDeleted: () -> Unit, detail: Boolean = false) {
 /** The white heart that pops over a photo on double-tap. */
 @Composable
 private fun HeartBurst(visible: Boolean, modifier: Modifier) {
-    AnimatedVisibility(visible, modifier = modifier, enter = scaleIn() + fadeIn(), exit = fadeOut()) {
+    AnimatedVisibility(
+        visible = visible,
+        modifier = modifier,
+        enter = scaleIn(
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessMediumLow,
+            ),
+            initialScale = 0.2f,
+        ) + fadeIn(animationSpec = tween(120)),
+        exit = scaleOut(
+            animationSpec = tween(250),
+            targetScale = 0.8f,
+        ) + fadeOut(animationSpec = tween(250)),
+    ) {
         Icon(Lucide.HeartFilled, null, tint = Color.White, modifier = Modifier.size(96.dp))
     }
 }
@@ -307,7 +335,11 @@ fun Carousel(images: List<PostImage>, onDoubleTap: () -> Unit) {
     val ratio = (first.width.toFloat() / first.height).coerceAtLeast(0.5f)
     val pager = rememberPagerState { images.size }
     Box(Modifier.fillMaxWidth().aspectRatio(ratio).background(Color.Black)) {
-        HorizontalPager(pager, Modifier.fillMaxSize()) { page ->
+        HorizontalPager(
+            state = pager,
+            modifier = Modifier.fillMaxSize(),
+            beyondViewportPageCount = 1,
+        ) { page ->
             AsyncImage(
                 model = StorageImage(Buckets.POSTS, images[page].path),
                 contentDescription = null,

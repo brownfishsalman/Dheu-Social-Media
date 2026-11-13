@@ -58,6 +58,8 @@ Useful commands:
    - `supabase/migrations/0026_app_crashes.sql` (crash reports from the Android app; the site's Admin → Crashes page needs it)
    - `supabase/migrations/0027_friend_swipes.sql` (Find friends: swipe profiles, likes and matches, and a private `swipe` photo bucket; run before deploying the code that uses it)
    - `supabase/migrations/0028_signup_settings.sql` (the open or invite-only switch for sign-up, starting open; run before deploying the code that uses it)
+   - `supabase/migrations/0029_infinite_swipe_deck.sql` (a random Find friends deck; replaced by 0030, run it only to keep the order)
+   - `supabase/migrations/0030_swipe_deck_rounds.sql` (the Find friends deck goes round: everyone but your matches comes back once you've seen them all, and unmatching brings someone back)
    (0016–0020 must run before deploying the code that uses them.)
    Never add the `private` schema (made by 0024) to the API's exposed schemas: it holds checks that members must not be able to call.
 2. **Turn off "Confirm email"** – Supabase → Authentication → Sign In / Providers → Email → untick _Confirm email_. (Accounts are created by the website's server, so no confirmation email is needed. The free tier can't send emails to arbitrary addresses anyway.)
@@ -103,6 +105,10 @@ Everything is under **Settings → Open admin panel** (only visible to the admin
 - **Sign-up** – open to anyone with the link, until you make it invite-only at the top of Admin → Invites (and back again). While it's open, nobody needs a code and Settings → Share with friends shares the plain sign-up link. There's no limit on new accounts, so if fake accounts start appearing, switch it to invite-only and delete them in Members.
 - **Invites** – used while sign-up is invite-only. Generate a code, set how many people can use it and when it expires. Members can also make their own single-use codes (Settings → Share with friends, max 5 unused each); those appear here too, marked "by @username". The copy button gives a link like `https://dheu-beige.vercel.app/signup?code=WAVE-XXXX-XXXX` with the code pre-filled.
 - **Members** – suspend (blocks login instantly), reinstate, set a temporary password for someone who forgot theirs (tell them privately; they change it in Settings), or delete a member and everything they posted.
+- **Password reset** – members can reset a forgotten password themselves ("Forgot password?" on the login screen): Supabase emails them a code, they type it in with a new password. This needs two things set up once, or no email arrives:
+  1. **Custom SMTP.** Supabase's built-in email only reaches the members of your Supabase organisation, a few emails an hour. Sign up with an email service that has a free plan (Resend, Brevo and others), then fill in its SMTP details in Supabase → Authentication → Emails → SMTP Settings.
+  2. **A code in the email.** Supabase → Authentication → Emails → Templates → Reset Password: the default sends a link. Replace the body with something that shows the code, for example `<p>Your Dheu password reset code is <strong>{{ .Token }}</strong>. It works for an hour.</p>`.
+  Until then, set a temporary password in Members as before.
 - **Privacy** – each member chooses public or private at sign-up and can switch in Settings → Account privacy (members who joined before this existed are asked once). Public accounts are visible to every member and can be followed instantly; private accounts need an accepted follow request. Members can block each other (Settings → Blocked accounts to undo).
 - **Suggestions** – pick members to appear in the "Suggested for you" strip that shows in feeds now and then; drag order with the arrows.
 - **Announcements** – Messages → *Dheu announcements* (pinned at the top of everyone's inbox). Only you can post there; members get an unread badge and see it instantly. Use it for new features, downtime notices, house rules.
@@ -154,7 +160,8 @@ If you outgrow this, Supabase Pro ($25/mo) lifts the limits with no code changes
 
 - **"Couldn't load stats" in admin** → run `0002_admin.sql` in the SQL Editor.
 - **Everything errors after a quiet week** → Supabase project is paused; restore it in the dashboard.
-- **Someone can't log in** → check Members: are they suspended? Otherwise set them a temporary password.
+- **Someone can't log in** → check Members: are they suspended? Otherwise they can use "Forgot password?" (once email is set up, see Password reset above), or you set them a temporary password.
+- **Password reset code never arrives** → custom SMTP isn't set up, or the Reset Password email template doesn't include `{{ .Token }}` (see Password reset above).
 - **Images don't upload** → Supabase → Storage: the buckets `avatars`, `posts`, `stories` must exist (they're created by `0001_init.sql`).
 - **Rotate a leaked key** → Supabase → Project Settings → API keys → rotate, then update `.env.local` and the Vercel environment variables, and redeploy.
 

@@ -6,6 +6,7 @@ import coil3.PlatformContext
 import coil3.SingletonImageLoader
 import coil3.disk.DiskCache
 import coil3.disk.directory
+import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.crossfade
 import com.salmansaadiq.dheu.data.CrashReports
@@ -36,6 +37,11 @@ class DheuApp : Application(), SingletonImageLoader.Factory {
                 add(StorageImageFetcher.Factory())
             }
             .crossfade(true)
+            .memoryCache {
+                MemoryCache.Builder()
+                    .maxSizePercent(context, 0.25)
+                    .build()
+            }
             .diskCache {
                 DiskCache.Builder()
                     .directory(context.cacheDir.resolve("images"))

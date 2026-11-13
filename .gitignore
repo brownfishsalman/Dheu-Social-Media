@@ -24,6 +24,11 @@
 .DS_Store
 *.pem
 
+# built Android apps (releases go on GitHub, not in the repo)
+*.apk
+*.aab
+*.idsig
+
 # debug
 npm-debug.log*
 yarn-debug.log*

@@ -1,8 +1,10 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-// Paths that don't require a logged-in user.
-const PUBLIC_PATHS = ["/login", "/signup"];
+// Paths for logged-out users (logged-in ones are sent home from them).
+const PUBLIC_PATHS = ["/login", "/signup", "/forgot-password"];
+// Paths open whether logged in or not: the email link callback signs people in itself.
+const OPEN_PATHS = ["/auth/callback"];
 
 // Refreshes the Supabase session cookie on every request and gates the app:
 // logged-out users are sent to /login, logged-in users away from /login.
@@ -34,6 +36,7 @@ export async function updateSession(request: NextRequest) {
   const isLoggedIn = Boolean(data?.claims);
 
   const { pathname } = request.nextUrl;
+  if (OPEN_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))) return response;
   const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
 
   if (!isLoggedIn && !isPublic) {

@@ -47,9 +47,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -315,6 +317,7 @@ private data class Tab(val route: Any, val label: String, val icon: ImageVector?
 private fun MainNav() {
     val controller = rememberNavController()
     val nav = remember(controller) { Nav(controller) }
+    val haptics = LocalHapticFeedback.current
     val app = LocalAppState.current
     val me by app.me.collectAsStateWithLifecycle()
     val badges by app.badges.collectAsStateWithLifecycle()
@@ -374,7 +377,10 @@ private fun MainNav() {
                                 val selected = activeTab == tab.route::class
                                 NavigationBarItem(
                                     selected = selected,
-                                    onClick = { nav.tab(tab.route) },
+                                    onClick = {
+                                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        nav.tab(tab.route)
+                                    },
                                     icon = {
                                         Box {
                                             if (tab.icon != null) {

@@ -1,6 +1,7 @@
--- Access-rule tests: Find friends (0027). Who sees which swipe profile and
--- photo, secret likes, matches, the deck starting over, undo, unmatch and
--- blocks. See 01_privacy_follows_blocks.sql for how these files work.
+-- Access-rule tests: Find friends (0027, deck rules from 0030). Who sees
+-- which swipe profile and photo, secret likes, matches leaving the deck,
+-- the deck starting over with everyone, undo, unmatch and matching again,
+-- and blocks. See 01_privacy_follows_blocks.sql for how these files work.
 begin;
 
 do $test$
@@ -31,6 +32,8 @@ begin
   select u, 'hi', array['Football', ' football ', 'Coffee'], array[u::text || '/photo.jpg']
   from unnest(array[v_ann, v_ben, v_cat, v_eve, v_fay]) as u;
   update public.swipe_profiles set active = false where user_id = v_fay;
+  -- Anyone else's profile (only when this runs on a real database, rolled back) stays out of the decks.
+  update public.swipe_profiles set active = false where user_id <> all (array[v_ann, v_ben, v_cat, v_eve, v_fay]);
   insert into public.blocks (blocker_id, blocked_id) values (v_ann, v_eve);
   select cardinality(interests) into n from public.swipe_profiles where user_id = v_ann;
   results := results || jsonb_build_object('interests_deduplicated', n);
@@ -126,19 +129,34 @@ begin
   results := results || jsonb_build_object('match_seen_after_marking', v_seen);
   select public.swipe_undo(v_ben) into v_ok;
   results := results || jsonb_build_object('undo_a_match', v_ok);
+  select count(*) into n from public.swipe_deck() d where d.user_id = v_ben;
+  results := results || jsonb_build_object('match_in_deck', n);
+  select s.matched into v_matched from public.swipe(v_ben, false) s;
+  results := results || jsonb_build_object('pass_on_a_match_says_matched', v_matched);
+  select count(*) into n from public.my_swipe_matches();
+  results := results || jsonb_build_object('match_kept_after_pass', n);
   perform public.swipe_unmatch(v_ben);
   select count(*) into n from public.my_swipe_matches();
   results := results || jsonb_build_object('matches_after_unmatch', n);
+  select count(*) into n from public.swipe_deck() d where d.user_id = v_ben;
+  results := results || jsonb_build_object('unmatched_back_in_my_deck', n);
   execute format('set local role %I', v_me);
 
-  -- ---- ben: the match is gone, and ann stays out of his deck ----
+  -- ---- ben: the match is gone, and ann is back in his deck ----
   perform set_config('request.jwt.claims', json_build_object('sub', v_ben, 'role', 'authenticated')::text, true);
   set local role authenticated;
   select count(*) into n from public.my_swipe_matches();
   results := results || jsonb_build_object('other_side_matches_after_unmatch', n);
   select count(*) into n from public.swipe_deck() d where d.user_id = v_ann;
-  results := results || jsonb_build_object('unmatched_person_in_deck', n);
+  results := results || jsonb_build_object('unmatcher_back_in_their_deck', n);
   perform public.swipe(v_cat, true);
+  execute format('set local role %I', v_me);
+
+  -- ---- ann changes her mind: ben's like still stands, so it's a match again ----
+  perform set_config('request.jwt.claims', json_build_object('sub', v_ann, 'role', 'authenticated')::text, true);
+  set local role authenticated;
+  select s.matched into v_matched from public.swipe(v_ben, true) s;
+  results := results || jsonb_build_object('match_again_after_unmatch', v_matched);
   execute format('set local role %I', v_me);
 
   -- ---- cat likes ben back, then blocks him ----
@@ -159,12 +177,14 @@ begin
     "profile_with_someone_elses_photo": "BAD_PHOTOS", "profile_for_someone_else": "rejected",
     "deck_cards": 2, "sees_blocked_or_paused_profile": 0, "fetches_deck_photo": 1,
     "fetches_blocked_or_paused_photo": 0, "writes_swipe_directly": "rejected", "moves_own_deck": "rejected",
-    "swipes_blocked_person": "NOT_AVAILABLE", "one_sided_like_matches": false, "deck_after_everyone": 1,
+    "swipes_blocked_person": "NOT_AVAILABLE", "one_sided_like_matches": false, "deck_after_everyone": 2,
     "deck_started_over": true, "undo_an_older_swipe": false, "undo_last_swipe": true, "undone_card_is_fresh": 1,
     "sees_who_liked_them": 0, "mutual_like_matches": true, "match_opens_chat": true, "both_in_the_chat": 2,
     "second_liker_saw_match": true, "first_liker_saw_match": false, "match_seen_after_marking": true,
-    "undo_a_match": false, "matches_after_unmatch": 0, "other_side_matches_after_unmatch": 0,
-    "unmatched_person_in_deck": 0, "second_match": true, "matches_after_block": 0, "swipes_left_after_block": 0
+    "undo_a_match": false, "match_in_deck": 0, "pass_on_a_match_says_matched": false, "match_kept_after_pass": 1,
+    "matches_after_unmatch": 0, "unmatched_back_in_my_deck": 1, "other_side_matches_after_unmatch": 0,
+    "unmatcher_back_in_their_deck": 1, "match_again_after_unmatch": true,
+    "second_match": true, "matches_after_block": 0, "swipes_left_after_block": 0
   }';
   for rec in select key, value from jsonb_each(expected) loop
     if results -> rec.key is distinct from rec.value then

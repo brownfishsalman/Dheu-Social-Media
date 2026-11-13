@@ -8,9 +8,9 @@ It runs on Android 9 (API 28) and newer. Test builds are on the [Releases page](
 
 Everything a member can do on the website, except the admin panel, which stays there.
 
-- Sign-up with a public or private account (and an invite code while the admin has made sign-up invite-only), sign-in, and the privacy choice for older accounts that never made one.
+- Sign-up with a public or private account (and an invite code while the admin has made sign-up invite-only), sign-in, a password reset with a code sent by email, and the privacy choice for older accounts that never made one.
 - The home feed with stories and, now and then, "Suggested for you". Posts with swipeable photos, double-tap likes, comments with replies and likes, a likers list, a bookmark that keeps a post in your Saved tab, saving your own posts' photos to the phone, and sharing a new post of up to 10 photos from the + at the top of Home.
-- Find friends, the flame tab: make a swipe profile (1 to 6 photos, a bio, an optional age and up to five interests), then swipe right to like or left to pass, with one undo. A mutual like is a match, with an "It's a match" screen and a chat in Messages; a matches list lets you unmatch or report. Once you've seen everyone, the people you passed on come back.
+- Find friends, the flame tab: make a swipe profile (1 to 6 photos, a bio, an optional age and up to five interests), then swipe right to like or left to pass, with one undo. A mutual like is a match, with an "It's a match" screen and a chat in Messages; a matches list lets you unmatch or report. Once you've seen everyone, the deck starts over with everyone but your matches; an unmatched person comes back and can be matched again.
 - Profiles with follow, unfollow, follow requests, follower lists, blocking, search, a Saved tab only you can see, and highlights: view them, make one from your stories, add a story to one from the story itself, remove a story or delete a highlight.
 - Stories you can view, post to everyone or to your close friends, react to, reply to and check who has seen.
 - Activity with follow requests to accept or decline.

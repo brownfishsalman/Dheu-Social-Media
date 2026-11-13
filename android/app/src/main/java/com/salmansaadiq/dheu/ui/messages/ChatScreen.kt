@@ -69,8 +69,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -177,6 +179,7 @@ private fun ChatBody(vm: ChatViewModel, isGroup: Boolean, canSend: Boolean, bloc
     val me = app.userId
     val myProfile by app.me.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
     val toast = rememberToast()
     val c = Dheu.colors
     val list = rememberLazyListState()
@@ -248,8 +251,14 @@ private fun ChatBody(vm: ChatViewModel, isGroup: Boolean, canSend: Boolean, bloc
                             isGroup = isGroup,
                             myUsername = myProfile?.username,
                             nameOf = ::nameOf,
-                            onLongPress = { actionsFor = m },
-                            onDoubleTap = if (canSend) ({ vm.toggleHeart(m) }) else null,
+                            onLongPress = {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                actionsFor = m
+                            },
+                            onDoubleTap = if (canSend) ({
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                vm.toggleHeart(m)
+                            }) else null,
                             onShowReactions = { reactorsFor = m },
                             onOpenImage = { lightbox = it },
                             opening = vm.opening == m.id,
@@ -648,6 +657,7 @@ private fun Composer(
 ) {
     val c = Dheu.colors
     val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
     val toast = rememberToast()
     var text by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue("")) }
     var photo by remember { mutableStateOf<Uri?>(null) }
@@ -663,12 +673,14 @@ private fun Composer(
             recorder.start()
             elapsed = 0
             recording = true
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
         } catch (_: Exception) {
             toast("Couldn't use the microphone.")
         }
     }
     fun stopRecording() {
         recording = false
+        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         clip = recorder.stop() ?: run {
             toast("That was too short to send.")
             null
@@ -816,6 +828,7 @@ private fun Composer(
                     val canSend = hasContent && !vm.sending
                     Box(
                         Modifier.size(40.dp).clip(CircleShape).background(c.brand).clickable(enabled = canSend) {
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             vm.send(context, text.text, photo, replyTo, clip, viewOnce = viewOnce) { ok ->
                                 if (ok) {
                                     text = TextFieldValue("")

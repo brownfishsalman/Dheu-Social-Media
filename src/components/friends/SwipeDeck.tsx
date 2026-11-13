@@ -70,16 +70,19 @@ export function SwipeDeck({ initialCards, unseenMatches, me }: Props) {
         return;
       }
       const held = new Set(holding.map((c) => c.user_id));
-      const fresh = (data ?? []).filter((c) => !held.has(c.user_id));
+      const raw = data ?? [];
+      const isLooped = raw.some((c) => c.looped);
+      const fresh = isLooped ? raw : raw.filter((c) => !held.has(c.user_id));
       if (fresh.length === 0) {
         if (holding.length === 0) setExhausted(true);
         return;
       }
       setExhausted(false);
-      if (holding.length === 0 && fresh[0].looped) setLooped(true);
+      if (isLooped) setLooped(true);
       setCards((current) => {
         const have = new Set(current.map((c) => c.user_id));
-        return [...current, ...fresh.filter((c) => !have.has(c.user_id))];
+        const toAdd = fresh.filter((c) => !have.has(c.user_id));
+        return current.length === 0 ? fresh : [...current, ...toAdd];
       });
     },
     [router],
@@ -168,7 +171,7 @@ export function SwipeDeck({ initialCards, unseenMatches, me }: Props) {
     <div className="mx-auto flex w-full max-w-[420px] flex-col px-4 pt-3 pb-4">
       {looped && (
         <p className="mb-3 rounded-xl bg-brand-soft px-3.5 py-2.5 text-sm text-brand-strong">
-          You&apos;ve seen everyone. Here are the people you passed on, in a new order.
+          You&apos;ve seen everyone. Starting over with everyone in a new order.
         </p>
       )}
       {error && (

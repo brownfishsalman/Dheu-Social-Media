@@ -38,7 +38,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -116,6 +118,7 @@ fun ProfileScreen(username: String, isTab: Boolean = false) {
     val profile = (state as? Load.Ready)?.value?.profile
     val app = LocalAppState.current
     val isMe = profile?.id == app.userId
+    val haptics = LocalHapticFeedback.current
     var menu by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().background(Dheu.colors.surface)) {
@@ -135,7 +138,13 @@ fun ProfileScreen(username: String, isTab: Boolean = false) {
                 if (data.profile == null) {
                     ErrorState("This member isn't here, or you can't see their profile.", onRetry = null)
                 } else {
-                    PullToRefreshBox(isRefreshing = loader.refreshing, onRefresh = { loader.reload(silent = true) }) {
+                    PullToRefreshBox(
+                        isRefreshing = loader.refreshing,
+                        onRefresh = {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            loader.reload(silent = true)
+                        },
+                    ) {
                         ProfileBody(data, onChanged = { loader.reload(silent = true) })
                     }
                     if (menu) ProfileMenu(data.profile, data.stats, onDismiss = { menu = false }, onChanged = { loader.reload(silent = true) })
@@ -276,9 +285,13 @@ private fun ProfileBody(data: ProfileData, onChanged: () -> Unit) {
 @Composable
 private fun ProfileTab(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
     val c = Dheu.colors
+    val haptics = LocalHapticFeedback.current
     val tint = if (selected) c.ink else c.inkFaint
     Column(
-        Modifier.clickable(onClick = onClick).semantics { this.selected = selected },
+        Modifier.clickable(onClick = {
+            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onClick()
+        }).semantics { this.selected = selected },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(Modifier.width(72.dp).height(1.5.dp).background(if (selected) c.ink else Color.Transparent))

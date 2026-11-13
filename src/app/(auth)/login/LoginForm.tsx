@@ -56,7 +56,10 @@ export function LoginForm({ next }: { next?: string }) {
         </Link>
       </p>
       <p className="text-center text-xs text-ink-faint">
-        Forgot your password? Ask the admin to reset it.
+        Forgot your password?{" "}
+        <Link href="/forgot-password" className="font-semibold text-brand hover:underline">
+          Reset it
+        </Link>
       </p>
     </form>
   );

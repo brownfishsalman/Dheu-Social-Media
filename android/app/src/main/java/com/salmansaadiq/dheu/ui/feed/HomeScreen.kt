@@ -44,7 +44,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -173,6 +175,7 @@ fun HomeScreen() {
     val c = Dheu.colors
     val list = rememberLazyListState()
     val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val suggestionsHidden by remember { SuggestionPrefs.hidden(context.applicationContext) }.collectAsStateWithLifecycle(initialValue = true)
     val suggestions = if (suggestionsHidden) emptyList() else vm.suggestions
@@ -213,7 +216,14 @@ fun HomeScreen() {
         when {
             vm.loading && vm.posts.isEmpty() -> Loading()
             vm.error != null -> ErrorState(vm.error!!, onRetry = { vm.load() })
-            else -> PullToRefreshBox(isRefreshing = vm.refreshing, onRefresh = { vm.load(silent = true); app.refreshBadges() }) {
+            else -> PullToRefreshBox(
+                isRefreshing = vm.refreshing,
+                onRefresh = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    vm.load(silent = true)
+                    app.refreshBadges()
+                },
+            ) {
                 LazyColumn(state = list, modifier = Modifier.fillMaxSize()) {
                     item(key = "stories") { me?.let { StoryBar(vm.stories, it) } }
                     if (vm.posts.isEmpty()) {

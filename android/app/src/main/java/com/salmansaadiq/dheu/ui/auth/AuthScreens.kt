@@ -57,11 +57,20 @@ import com.salmansaadiq.dheu.ui.theme.Dheu
 import com.salmansaadiq.dheu.ui.theme.Outfit
 import kotlinx.coroutines.launch
 
-/** Logged-out flow: log in, or sign up (with an invite code while sign-up is invite-only). */
+private enum class AuthPage { LOGIN, SIGNUP, FORGOT_PASSWORD }
+
+/** Logged-out flow: log in, sign up, or reset password. */
 @Composable
 fun AuthFlow() {
-    var signingUp by rememberSaveable { mutableStateOf(false) }
-    if (signingUp) SignupScreen(onLogin = { signingUp = false }) else LoginScreen(onSignup = { signingUp = true })
+    var page by rememberSaveable { mutableStateOf(AuthPage.LOGIN) }
+    when (page) {
+        AuthPage.LOGIN -> LoginScreen(
+            onSignup = { page = AuthPage.SIGNUP },
+            onForgotPassword = { page = AuthPage.FORGOT_PASSWORD },
+        )
+        AuthPage.SIGNUP -> SignupScreen(onLogin = { page = AuthPage.LOGIN })
+        AuthPage.FORGOT_PASSWORD -> ForgotPasswordScreen(onBackToLogin = { page = AuthPage.LOGIN })
+    }
 }
 
 @Composable
@@ -117,7 +126,7 @@ private fun ErrorText(message: String?) {
 }
 
 @Composable
-private fun LoginScreen(onSignup: () -> Unit) {
+private fun LoginScreen(onSignup: () -> Unit, onForgotPassword: () -> Unit) {
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
@@ -127,6 +136,20 @@ private fun LoginScreen(onSignup: () -> Unit) {
     AuthFrame("Welcome back. Your people are here.") {
         DheuTextField(email, { email = it }, "Email", keyboardType = KeyboardType.Email)
         DheuTextField(password, { password = it }, "Password", password = true)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            Text(
+                "Forgot password?",
+                color = Dheu.colors.brand,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .clickable(onClick = onForgotPassword)
+                    .padding(vertical = 2.dp),
+            )
+        }
         ErrorText(error)
         PrimaryButton(
             "Log in",
@@ -152,6 +175,143 @@ private fun LoginScreen(onSignup: () -> Unit) {
         )
         TextButton(onClick = onSignup, modifier = Modifier.fillMaxWidth()) {
             Text("New here? Create an account", color = Dheu.colors.brand, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+private fun ForgotPasswordScreen(onBackToLogin: () -> Unit) {
+    var step by rememberSaveable { mutableStateOf(1) }
+    var email by rememberSaveable { mutableStateOf("") }
+    var code by rememberSaveable { mutableStateOf("") }
+    var newPassword by rememberSaveable { mutableStateOf("") }
+    var confirmPassword by rememberSaveable { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    AuthFrame(
+        if (step == 1) "Enter your email to receive a recovery code."
+        else "Enter the 6-digit code and choose a new password."
+    ) {
+        if (step == 1) {
+            DheuTextField(email, { email = it }, "Email", keyboardType = KeyboardType.Email)
+            ErrorText(error)
+            PrimaryButton(
+                "Send recovery code",
+                onClick = {
+                    val clean = email.trim()
+                    if (clean.isBlank() || !clean.contains('@')) {
+                        error = "Enter a valid email address."
+                        return@PrimaryButton
+                    }
+                    busy = true
+                    error = null
+                    scope.launch {
+                        try {
+                            Account.requestPasswordReset(clean)
+                            step = 2
+                        } catch (e: Exception) {
+                            error = e.friendly("Couldn't send recovery code. Try again.")
+                        } finally {
+                            busy = false
+                        }
+                    }
+                },
+                loading = busy,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            TextButton(onClick = onBackToLogin, modifier = Modifier.fillMaxWidth()) {
+                Text("Back to log in", color = Dheu.colors.inkMuted, fontWeight = FontWeight.Medium)
+            }
+        } else {
+            Text(
+                "A recovery code was sent to ${email.trim()}. Check your inbox or spam.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Dheu.colors.inkMuted,
+            )
+            DheuTextField(
+                code,
+                { if (it.length <= 10) code = it.filter { ch -> ch.isDigit() } },
+                "Recovery code",
+                keyboardType = KeyboardType.Number,
+            )
+            DheuTextField(
+                newPassword,
+                { newPassword = it },
+                "New password",
+                password = true,
+                supporting = "At least 8 characters",
+            )
+            DheuTextField(
+                confirmPassword,
+                { confirmPassword = it },
+                "Confirm new password",
+                password = true,
+            )
+            ErrorText(error)
+            PrimaryButton(
+                "Reset password & log in",
+                onClick = {
+                    val cleanCode = code.trim()
+                    when {
+                        cleanCode.length < 6 -> error = "Enter the code from your email."
+                        newPassword.length < 8 -> error = "Password must be at least 8 characters."
+                        newPassword != confirmPassword -> error = "Passwords do not match."
+                        else -> {
+                            busy = true
+                            error = null
+                            scope.launch {
+                                try {
+                                    Account.resetPasswordWithOtp(email, cleanCode, newPassword)
+                                } catch (e: Exception) {
+                                    error = e.friendly("Invalid or expired code. Please double-check your code or request a new one.")
+                                } finally {
+                                    busy = false
+                                }
+                            }
+                        }
+                    }
+                },
+                loading = busy,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                TextButton(
+                    onClick = {
+                        if (!busy) {
+                            busy = true
+                            error = null
+                            scope.launch {
+                                try {
+                                    Account.requestPasswordReset(email)
+                                } catch (e: Exception) {
+                                    error = e.friendly("Couldn't resend code. Try again shortly.")
+                                } finally {
+                                    busy = false
+                                }
+                            }
+                        }
+                    },
+                ) {
+                    Text("Resend code", color = Dheu.colors.brand, style = MaterialTheme.typography.bodySmall)
+                }
+                TextButton(
+                    onClick = {
+                        step = 1
+                        code = ""
+                        error = null
+                    },
+                ) {
+                    Text("Change email", color = Dheu.colors.inkMuted, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            TextButton(onClick = onBackToLogin, modifier = Modifier.fillMaxWidth()) {
+                Text("Back to log in", color = Dheu.colors.inkMuted, fontWeight = FontWeight.Medium)
+            }
         }
     }
 }

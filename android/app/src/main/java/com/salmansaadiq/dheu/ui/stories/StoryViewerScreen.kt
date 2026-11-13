@@ -39,13 +39,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -165,6 +168,7 @@ private fun StoryPlayer(
 ) {
     val me = LocalAppState.current.userId
     val nav = LocalNav.current
+    val haptics = LocalHapticFeedback.current
     val isOwner = group.author.id == me
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
@@ -196,9 +200,16 @@ private fun StoryPlayer(
         if (!isOwner && highlight == null) runCatching { Stories.markViewed(story.id, me) }
     }
     LaunchedEffect(story.id, paused) {
+        if (paused) return@LaunchedEffect
+        var lastTime = 0L
         while (progress < 1f) {
-            delay(16)
-            if (!paused) progress = (progress + 16f / DURATION_MS).coerceAtMost(1f)
+            withFrameMillis { now ->
+                if (lastTime != 0L) {
+                    val delta = now - lastTime
+                    progress = (progress + delta.toFloat() / DURATION_MS).coerceAtMost(1f)
+                }
+                lastTime = now
+            }
         }
         next()
     }
@@ -213,6 +224,7 @@ private fun StoryPlayer(
                 val up = waitForUpOrCancellation()
                 holding = false
                 if (up != null && System.currentTimeMillis() - start < 250) {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     if (down.position.x < size.width / 3f) prev() else next()
                 }
             }
@@ -290,6 +302,7 @@ private fun StoryPlayer(
                 Row(horizontalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                     REACTIONS.forEach { emoji ->
                         Text(emoji, fontSize = 26.sp, modifier = Modifier.clickable {
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             scope.launch {
                                 toast(runCatching { Stories.react(story.id, me, emoji) }.fold({ "Sent $emoji" }, { it.friendly("Couldn't send") }))
                             }

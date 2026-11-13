@@ -58,10 +58,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -242,15 +244,18 @@ class FriendsViewModel(private val me: String) : ViewModel() {
         fetching = true
         try {
             val held = holding.map { it.userId }.toSet()
-            val fresh = Friends.deck(held.toList()).filter { it.userId !in held }
+            val raw = Friends.deck(held.toList())
+            val isLooped = raw.any { it.looped }
+            val fresh = if (isLooped) raw else raw.filter { it.userId !in held }
             if (fresh.isEmpty()) {
                 if (holding.isEmpty()) exhausted = true
                 return
             }
             exhausted = false
-            if (holding.isEmpty() && fresh.first().looped) looped = true
+            if (isLooped) looped = true
             val have = cards.map { it.userId }.toSet()
-            cards = cards + fresh.filter { it.userId !in have }
+            val toAdd = fresh.filter { it.userId !in have }
+            cards = if (cards.isEmpty()) fresh else cards + toAdd
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -409,7 +414,7 @@ private fun Deck(vm: FriendsViewModel, onMatches: () -> Unit) {
     // A tap on Like or Pass: the top card flies off before it's decided.
     var request by remember { mutableStateOf<Boolean?>(null) }
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp)) {
-        if (vm.looped) Notice("You've seen everyone. Here are the people you passed on, in a new order.", c.brandSoft, c.brandStrong)
+        if (vm.looped) Notice("You've seen everyone. Starting over with everyone in a new order.", c.brandSoft, c.brandStrong)
         vm.error?.let { Notice(it, c.dangerSoft, c.danger) }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             val card = vm.cards.firstOrNull()
@@ -453,6 +458,7 @@ private fun Notice(text: String, background: Color, color: Color) {
 @Composable
 private fun RoundButton(icon: ImageVector, description: String, tint: Color, size: Dp, enabled: Boolean, onClick: () -> Unit) {
     val c = Dheu.colors
+    val haptics = LocalHapticFeedback.current
     Box(
         Modifier
             .size(size)
@@ -460,7 +466,10 @@ private fun RoundButton(icon: ImageVector, description: String, tint: Color, siz
             .clip(CircleShape)
             .background(c.surface)
             .border(1.dp, c.line, CircleShape)
-            .clickable(enabled = enabled, onClick = onClick),
+            .clickable(enabled = enabled, onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onClick()
+            }),
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, description, tint = tint, modifier = Modifier.size(size * 0.45f))
@@ -471,12 +480,14 @@ private fun RoundButton(icon: ImageVector, description: String, tint: Color, siz
 @Composable
 private fun SwipeableCard(card: Friends.Card, request: Boolean?, onDecide: (Boolean) -> Unit) {
     val c = Dheu.colors
+    val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val decide by rememberUpdatedState(onDecide)
     val dx = remember { Animatable(0f) }
     val dy = remember { Animatable(0f) }
     var photo by remember { mutableIntStateOf(0) }
     var flying by remember { mutableStateOf(false) }
+    var thresholdCrossed by remember { mutableStateOf(false) }
     val line = with(LocalDensity.current) { 110.dp.toPx() }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -508,13 +519,25 @@ private fun SwipeableCard(card: Friends.Card, request: Boolean?, onDecide: (Bool
                 }
                 .pointerInput(card.userId) {
                     detectDragGestures(
-                        onDragEnd = { if (abs(dx.value) > line) fly(dx.value > 0) else settle() },
-                        onDragCancel = { settle() },
+                        onDragEnd = {
+                            thresholdCrossed = false
+                            if (abs(dx.value) > line) fly(dx.value > 0) else settle()
+                        },
+                        onDragCancel = {
+                            thresholdCrossed = false
+                            settle()
+                        },
                     ) { change, amount ->
                         if (flying) return@detectDragGestures
                         change.consume()
                         scope.launch {
-                            dx.snapTo(dx.value + amount.x)
+                            val newX = dx.value + amount.x
+                            val pastLine = abs(newX) > line
+                            if (pastLine != thresholdCrossed) {
+                                thresholdCrossed = pastLine
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            }
+                            dx.snapTo(newX)
                             dy.snapTo(dy.value + amount.y)
                         }
                     }
@@ -522,7 +545,11 @@ private fun SwipeableCard(card: Friends.Card, request: Boolean?, onDecide: (Bool
                 .pointerInput(card.userId) {
                     detectTapGestures { position ->
                         val last = (card.photos.size - 1).coerceAtLeast(0)
+                        val prevPhoto = photo
                         photo = if (position.x < size.width / 3f) (photo - 1).coerceAtLeast(0) else (photo + 1).coerceAtMost(last)
+                        if (photo != prevPhoto) {
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        }
                     }
                 },
         ) {
@@ -648,6 +675,10 @@ private fun EmptyDeck(loading: Boolean, onRetry: () -> Unit, onMatches: () -> Un
 
 @Composable
 private fun MatchDialog(meImage: Any?, meName: String, match: ShownMatch, onChat: () -> Unit, onDismiss: () -> Unit) {
+    val haptics = LocalHapticFeedback.current
+    LaunchedEffect(match.userId) {
+        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+    }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
             Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.88f)).padding(24.dp),

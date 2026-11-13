@@ -1,10 +1,12 @@
 package com.salmansaadiq.dheu.data
 
 import com.salmansaadiq.dheu.BuildConfig
+import io.github.jan.supabase.auth.OtpType
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Order
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
@@ -41,6 +43,26 @@ object Account {
 
     suspend fun changePassword(password: String) {
         Backend.auth.updateUser { this.password = password }
+    }
+
+    suspend fun requestPasswordReset(email: String) {
+        Backend.auth.resetPasswordForEmail(email.trim())
+    }
+
+    /**
+     * Checking the code signs the member in, which swaps the logged-out
+     * screens for the app and cancels their coroutines, so both steps run
+     * NonCancellable: the new password is always saved. If saving it fails,
+     * the session goes again, so nobody is left signed in on the old password.
+     */
+    suspend fun resetPasswordWithOtp(email: String, token: String, newPassword: String) = withContext(NonCancellable) {
+        Backend.auth.verifyEmailOtp(type = OtpType.Email.RECOVERY, email = email.trim(), token = token.trim())
+        try {
+            Backend.auth.updateUser { this.password = newPassword }
+        } catch (e: Exception) {
+            runCatching { Backend.auth.signOut() }
+            throw e
+        }
     }
 
     @Serializable
