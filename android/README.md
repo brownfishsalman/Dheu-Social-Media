@@ -118,4 +118,4 @@ The Ktor HTTP engine and Coil's network fetcher are wired up by hand in `Backend
 
 ## Licences
 
-The app is GPL-3.0 like the rest of the repo. Inter and Outfit are under the SIL Open Font License and Lucide's icons under the ISC licence; their notices ship in `app/src/main/assets/licenses/`.
+The app is all rights reserved, like the rest of the repo (see the root `LICENSE`). Inter and Outfit are under the SIL Open Font License and Lucide's icons under the ISC licence; their notices ship in `app/src/main/assets/licenses/`.
